@@ -11,10 +11,13 @@ import {
   ActivityIndicator,
   PermissionsAndroid,
   Platform,
+  Modal,
+  FlatList,
 } from 'react-native';
 import DocumentPicker from 'react-native-document-picker';
 import Pdf from 'react-native-pdf';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ReactNativeBlobUtil from 'react-native-blob-util';
 
 const { CustomPrinter } = NativeModules;
 
@@ -22,50 +25,42 @@ export default function App() {
   const [pdfUri, setPdfUri] = useState(null);
   const [totalPages, setTotalPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [rotation, setRotation] = useState(0); // 0, 90, 180, 270
+  const [rotation, setRotation] = useState(0);
   
-  // Custom Paper Size (Width & Height)
+  // Custom Paper Size
   const [paperWidth, setPaperWidth] = useState('80');
   const [paperHeight, setPaperHeight] = useState('100');
   
-  // Connection & Printers
-  const [macAddress, setMacAddress] = useState('');
-  const [copies, setCopies] = useState(1);
+  // Bluetooth & Modal States
+  const [devices, setDevices] = useState([]);
+  const [selectedDevice, setSelectedDevice] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState('Belum Terhubung');
+  const [modalVisible, setModalVisible] = useState(false);
+  const [copies, setCopies] = useState(1);
 
-  // Load Saved Preferences on Mount
   useEffect(() => {
     loadSavedSettings();
-    requestPermissionsAndScan();
   }, []);
 
   const loadSavedSettings = async () => {
     try {
       const savedMac = await AsyncStorage.getItem('@printer_mac');
+      const savedName = await AsyncStorage.getItem('@printer_name');
       const savedWidth = await AsyncStorage.getItem('@paper_width');
       const savedHeight = await AsyncStorage.getItem('@paper_height');
 
-      if (savedMac) setMacAddress(savedMac);
+      if (savedMac) {
+        setSelectedDevice({ name: savedName || 'Printer Bluetooth', address: savedMac });
+      }
       if (savedWidth) setPaperWidth(savedWidth);
       if (savedHeight) setPaperHeight(savedHeight);
     } catch (e) {
-      console.log('Gagal memuat pengaturan:', e);
+      console.log('Error memuat memori:', e);
     }
   };
 
-  const saveSettings = async (mac, width, height) => {
-    try {
-      if (mac) await AsyncStorage.setItem('@printer_mac', mac);
-      if (width) await AsyncStorage.setItem('@paper_width', width);
-      if (height) await AsyncStorage.setItem('@paper_height', height);
-    } catch (e) {
-      console.log('Gagal menyimpan pengaturan:', e);
-    }
-  };
-
-  const requestPermissionsAndScan = async () => {
+  const requestPermissions = async () => {
     if (Platform.OS === 'android') {
       try {
         if (Platform.Version >= 31) {
@@ -74,64 +69,64 @@ export default function App() {
             PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           ]);
-
-          if (
+          return (
             granted['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED &&
             granted['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED
-          ) {
-            autoScanBluetooth();
-          } else {
-            setConnectionStatus('Izin Bluetooth ditolak');
-          }
+          );
         } else {
           const granted = await PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
           );
-          if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-            autoScanBluetooth();
-          } else {
-            setConnectionStatus('Izin Lokasi/Bluetooth ditolak');
-          }
+          return granted === PermissionsAndroid.RESULTS.GRANTED;
         }
       } catch (err) {
-        console.warn(err);
+        return false;
       }
+    }
+    return true;
+  };
+
+  const handleOpenScanModal = async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) {
+      Alert.alert('Izin Ditolak', 'Izin Bluetooth dan Lokasi diperlukan.');
+      return;
+    }
+
+    setModalVisible(true);
+    scanBluetoothDevices();
+  };
+
+  const scanBluetoothDevices = async () => {
+    setIsScanning(true);
+    setDevices([]);
+    try {
+      if (CustomPrinter && CustomPrinter.getPairedDevices) {
+        const paired = await CustomPrinter.getPairedDevices();
+        setDevices(paired || []);
+      } else {
+        Alert.alert('Error', 'Modul native printer tidak ditemukan.');
+      }
+    } catch (error) {
+      Alert.alert('Gagal Scan', error.message || 'Tidak dapat mencari perangkat Bluetooth.');
+    } finally {
+      setIsScanning(false);
     }
   };
 
-  const autoScanBluetooth = async () => {
-    setIsScanning(true);
-    setConnectionStatus('Memindai Perangkat Bluetooth...');
-
+  const handleConnectDevice = async (device) => {
     try {
-      // Panggil modul native jika ada untuk mendapatkan paired devices
-      if (CustomPrinter && CustomPrinter.getPairedDevices) {
-        const devices = await CustomPrinter.getPairedDevices();
-        if (devices && devices.length > 0) {
-          // Gunakan MAC address tersimpan atau perangkat pertama
-          const savedMac = await AsyncStorage.getItem('@printer_mac');
-          const targetDevice = devices.find(d => d.address === savedMac) || devices[0];
-          
-          setMacAddress(targetDevice.address);
-          setConnectionStatus(`Terhubung: ${targetDevice.name || targetDevice.address}`);
-          await saveSettings(targetDevice.address, paperWidth, paperHeight);
-        } else {
-          setConnectionStatus('Tidak ada printer terpasang (Paired)');
-        }
-      } else {
-        // Fallback jika menggunakan MAC Address yang sudah ada di memori
-        const savedMac = await AsyncStorage.getItem('@printer_mac');
-        if (savedMac) {
-          setMacAddress(savedMac);
-          setConnectionStatus(`Gunakan MAC Tersimpan: ${savedMac}`);
-        } else {
-          setConnectionStatus('Masukkan MAC Address / Scan Printer');
-        }
-      }
+      setSelectedDevice(device);
+      await AsyncStorage.setItem('@printer_mac', device.address);
+      await AsyncStorage.setItem('@printer_name', device.name || 'Printer Bluetooth');
+
+      setModalVisible(false);
+      Alert.alert(
+        'Koneksi Berhasil! 🟢',
+        `Printer "${device.name || device.address}" siap digunakan.`
+      );
     } catch (error) {
-      setConnectionStatus('Gagal memindai. Periksa Bluetooth Anda');
-    } finally {
-      setIsScanning(false);
+      Alert.alert('Gagal Terhubung 🔴', 'Tidak bisa menyambungkan ke printer ini.');
     }
   };
 
@@ -139,68 +134,63 @@ export default function App() {
     try {
       const res = await DocumentPicker.pick({
         type: [DocumentPicker.types.pdf],
+        copyTo: 'cachesDirectory',
       });
+
       if (res && res[0]) {
-        setPdfUri(res[0].uri);
+        let safeUri = res[0].fileCopyUri || res[0].uri;
+
+        if (safeUri.startsWith('content://')) {
+          const stat = await ReactNativeBlobUtil.fs.stat(safeUri);
+          safeUri = `file://${stat.path}`;
+        }
+
+        setPdfUri(safeUri);
       }
     } catch (err) {
       if (!DocumentPicker.isCancel(err)) {
-        Alert.alert('Error', 'Gagal memilih dokumen PDF.');
+        Alert.alert('Error', 'Gagal memilih file PDF.');
       }
     }
   };
 
-  const handleWidthChange = (val) => {
+  const handleWidthChange = async (val) => {
     setPaperWidth(val);
-    saveSettings(macAddress, val, paperHeight);
+    await AsyncStorage.setItem('@paper_width', val);
   };
 
-  const handleHeightChange = (val) => {
+  const handleHeightChange = async (val) => {
     setPaperHeight(val);
-    saveSettings(macAddress, paperWidth, val);
-  };
-
-  const handleMacChange = (val) => {
-    setMacAddress(val);
-    saveSettings(val, paperWidth, paperHeight);
-    if (val.trim() !== '') {
-      setConnectionStatus(`Alamat Printer: ${val}`);
-    } else {
-      setConnectionStatus('Belum Terhubung');
-    }
+    await AsyncStorage.setItem('@paper_height', val);
   };
 
   const handlePrint = async () => {
     if (!pdfUri) {
-      Alert.alert('Peringatan', 'Silakan pilih file PDF resi terlebih dahulu.');
+      Alert.alert('Peringatan', 'Pilih file PDF resi terlebih dahulu.');
       return;
     }
 
-    if (!macAddress) {
-      Alert.alert('Peringatan', 'Alamat MAC Printer Bluetooth belum diisi/ditemukan.');
+    if (!selectedDevice || !selectedDevice.address) {
+      Alert.alert('Printer Belum Dipilih', 'Silakan klik "Cari / Sambungkan Printer" terlebih dahulu.');
       return;
     }
 
     setIsPrinting(true);
-    setConnectionStatus('Mengirim Perintah Cetak...');
 
     try {
       const widthMm = parseInt(paperWidth, 10) || 80;
-      const heightMm = parseInt(paperHeight, 10) || 100;
 
       const result = await CustomPrinter.printPdfWithOptions(
         pdfUri,
-        macAddress,
+        selectedDevice.address,
         widthMm,
         rotation,
-        copies,
+        copies
       );
 
-      setConnectionStatus('Berhasil Dicetak! ✅');
-      Alert.alert('Sukses', result || 'Resi berhasil dicetak.');
+      Alert.alert('Cetak Berhasil! 🖨️', result || 'Resi telah terkirim ke printer.');
     } catch (error) {
-      setConnectionStatus('Cetak Gagal ❌');
-      Alert.alert('Gagal Cetak', error.message || 'Terjadi kesalahan saat mencetak.');
+      Alert.alert('Gagal Cetak ❌', error.message || 'Gagal terhubung ke printer thermal.');
     } finally {
       setIsPrinting(false);
     }
@@ -225,7 +215,10 @@ export default function App() {
               style={[styles.pdf, { transform: [{ rotate: `${rotation}deg` }] }]}
               onLoadComplete={(numberOfPages) => setTotalPages(numberOfPages)}
               onPageChanged={(page) => setCurrentPage(page)}
-              onError={(error) => console.log('PDF Error:', error)}
+              onError={(error) => {
+                Alert.alert('Error PDF', 'Gagal memuat preview PDF.');
+                console.log(error);
+              }}
             />
             <View style={styles.pageBadge}>
               <Text style={styles.pageBadgeText}>{`${currentPage} / ${totalPages}`}</Text>
@@ -264,7 +257,7 @@ export default function App() {
         </View>
       </View>
 
-      {/* Custom Paper Size (Width & Height) */}
+      {/* Paper Size Options */}
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Paper Size Options</Text>
         <View style={styles.rowTwoInputs}>
@@ -298,40 +291,37 @@ export default function App() {
         </View>
       </View>
 
-      {/* Print Options & Bluetooth Status */}
+      {/* Connection & Print Section */}
       <View style={styles.sectionHeaderBlue}>
         <Text style={styles.sectionHeaderBlueText}>Print options & Connection</Text>
       </View>
 
       <View style={styles.section}>
-        {/* Connection Status Banner */}
-        <View style={styles.statusBanner}>
-          <Text style={styles.statusBannerLabel}>Connection status:</Text>
-          <Text style={styles.statusBannerValue}>{connectionStatus}</Text>
-        </View>
-
-        {/* Bluetooth MAC Address Input & Auto Scan */}
-        <View style={styles.macRow}>
-          <TextInput
-            style={styles.macInput}
-            placeholder="MAC Address (00:11:22:...)"
-            value={macAddress}
-            onChangeText={handleMacChange}
-          />
-          <TouchableOpacity
-            style={styles.btnScan}
-            onPress={autoScanBluetooth}
-            disabled={isScanning}
-          >
-            {isScanning ? (
-              <ActivityIndicator color="#fff" size="small" />
+        <View style={styles.deviceStatusCard}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.deviceStatusTitle}>Status Printer:</Text>
+            {selectedDevice ? (
+              <View style={styles.statusConnectedRow}>
+                <View style={styles.dotGreen} />
+                <Text style={styles.connectedText}>
+                  {selectedDevice.name}
+                </Text>
+              </View>
             ) : (
-              <Text style={styles.btnScanText}>Scan BT</Text>
+              <View style={styles.statusConnectedRow}>
+                <View style={styles.dotRed} />
+                <Text style={styles.disconnectedText}>Belum Ada Printer</Text>
+              </View>
             )}
+          </View>
+
+          <TouchableOpacity style={styles.btnScanModal} onPress={handleOpenScanModal}>
+            <Text style={styles.btnScanModalText}>
+              {selectedDevice ? 'Ganti Printer' : 'Cari Printer'}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Copies Counter */}
         <View style={styles.copiesRow}>
           <Text style={styles.copiesLabel}>Number of prints</Text>
           <View style={styles.counterGroup}>
@@ -353,7 +343,6 @@ export default function App() {
           </View>
         </View>
 
-        {/* Action Buttons */}
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={styles.btnCancel}
@@ -378,15 +367,64 @@ export default function App() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Modal Daftar Printer */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Perangkat Bluetooth</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <Text style={styles.btnCloseModal}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {isScanning ? (
+              <View style={styles.loadingBox}>
+                <ActivityIndicator size="large" color="#0088cc" />
+                <Text style={styles.loadingText}>Mencari printer Bluetooth...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={devices}
+                keyExtractor={(item) => item.address}
+                ListEmptyComponent={
+                  <Text style={styles.emptyListText}>
+                    Tidak ada printer ditemukan. Pastikan Bluetooth ON & printer sudah di-pairing di Pengaturan HP.
+                  </Text>
+                }
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.deviceItem}
+                    onPress={() => handleConnectDevice(item)}
+                  >
+                    <View>
+                      <Text style={styles.deviceName}>{item.name || 'Printer Thermal'}</Text>
+                      <Text style={styles.deviceAddress}>{item.address}</Text>
+                    </View>
+                    <Text style={styles.btnConnectText}>Sambungkan 🔗</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+
+            <TouchableOpacity style={styles.btnRefresh} onPress={scanBluetoothDevices}>
+              <Text style={styles.btnRefreshText}>🔄 Scan Ulang Perangkat</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f4f6f9',
-  },
+  container: { flex: 1, backgroundColor: '#f4f6f9' },
   headerBar: {
     backgroundColor: '#0088cc',
     paddingVertical: 14,
@@ -395,43 +433,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  btnPick: {
-    backgroundColor: '#f39c12',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  btnPickText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  btnPick: { backgroundColor: '#f39c12', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+  btnPickText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
   pdfContainer: {
     height: 280,
     backgroundColor: '#e9ecef',
     justifyContent: 'center',
     alignItems: 'center',
     marginVertical: 10,
-    position: 'relative',
   },
-  pdf: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'transparent',
-  },
-  emptyPdf: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyPdfText: {
-    color: '#6c757d',
-    fontSize: 14,
-  },
+  pdf: { width: '100%', height: '100%', backgroundColor: 'transparent' },
+  emptyPdf: { justifyContent: 'center', alignItems: 'center' },
+  emptyPdfText: { color: '#6c757d', fontSize: 14 },
   pageBadge: {
     position: 'absolute',
     bottom: 10,
@@ -440,25 +454,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  pageBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  section: {
-    paddingHorizontal: 16,
-    marginVertical: 8,
-  },
-  sectionLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  rowBtnGroup: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+  pageBadgeText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  section: { paddingHorizontal: 16, marginVertical: 8 },
+  sectionLabel: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
+  rowBtnGroup: { flexDirection: 'row', justifyContent: 'space-between' },
   btnDegree: {
     flex: 1,
     backgroundColor: '#e2e8f0',
@@ -467,28 +466,12 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
   },
-  btnDegreeActive: {
-    backgroundColor: '#0088cc',
-  },
-  btnDegreeText: {
-    color: '#333',
-    fontWeight: 'bold',
-  },
-  btnDegreeTextActive: {
-    color: '#fff',
-  },
-  rowTwoInputs: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  inputBoxHalf: {
-    width: '48%',
-  },
-  inputSubLabel: {
-    fontSize: 12,
-    color: '#555',
-    marginBottom: 4,
-  },
+  btnDegreeActive: { backgroundColor: '#0088cc' },
+  btnDegreeText: { color: '#333', fontWeight: 'bold' },
+  btnDegreeTextActive: { color: '#fff' },
+  rowTwoInputs: { flexDirection: 'row', justifyContent: 'space-between' },
+  inputBoxHalf: { width: '48%' },
+  inputSubLabel: { fontSize: 12, color: '#555', marginBottom: 4 },
   inputWithUnit: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -499,129 +482,58 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     height: 42,
   },
-  textInputFlex: {
-    flex: 1,
-    fontSize: 15,
-    color: '#000',
-    padding: 0,
-  },
-  unitText: {
-    fontSize: 13,
-    color: '#777',
-  },
-  sectionHeaderBlue: {
-    backgroundColor: '#0088cc',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginTop: 10,
-  },
-  sectionHeaderBlueText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  statusBanner: {
-    marginBottom: 10,
-    marginTop: 6,
-  },
-  statusBannerLabel: {
-    fontSize: 13,
-    color: '#555',
-  },
-  statusBannerValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#0088cc',
-    marginTop: 2,
-  },
-  macRow: {
+  textInputFlex: { flex: 1, fontSize: 15, color: '#000', padding: 0 },
+  unitText: { fontSize: 13, color: '#777' },
+  sectionHeaderBlue: { backgroundColor: '#0088cc', paddingVertical: 8, paddingHorizontal: 16, marginTop: 10 },
+  sectionHeaderBlueText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  deviceStatusCard: {
     flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     marginBottom: 12,
   },
-  macInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    backgroundColor: '#fff',
-    height: 42,
-    marginRight: 8,
-  },
-  btnScan: {
-    backgroundColor: '#27ae60',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    borderRadius: 6,
-  },
-  btnScanText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-  copiesRow: {
+  deviceStatusTitle: { fontSize: 12, color: '#777' },
+  statusConnectedRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  dotGreen: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#2ec4b6', marginRight: 6 },
+  dotRed: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#e71d36', marginRight: 6 },
+  connectedText: { fontSize: 15, fontWeight: 'bold', color: '#2ec4b6' },
+  disconnectedText: { fontSize: 14, fontWeight: 'bold', color: '#e71d36' },
+  btnScanModal: { backgroundColor: '#0088cc', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6 },
+  btnScanModalText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
+  copiesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 12 },
+  copiesLabel: { fontSize: 14, color: '#333' },
+  counterGroup: { flexDirection: 'row', alignItems: 'center' },
+  btnCounter: { backgroundColor: '#0088cc', width: 36, height: 36, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+  btnCounterText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  counterValue: { fontSize: 16, fontWeight: 'bold', marginHorizontal: 16, color: '#000' },
+  actionRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 },
+  btnCancel: { flex: 1, borderWidth: 1, borderColor: '#ccc', backgroundColor: '#fff', paddingVertical: 12, marginRight: 8, borderRadius: 6, alignItems: 'center' },
+  btnCancelText: { color: '#555', fontWeight: 'bold' },
+  btnPrint: { flex: 1, backgroundColor: '#0088cc', paddingVertical: 12, marginLeft: 8, borderRadius: 6, alignItems: 'center' },
+  btnPrintText: { color: '#fff', fontWeight: 'bold' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalContainer: { backgroundColor: '#fff', borderRadius: 12, padding: 16, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  modalTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  btnCloseModal: { fontSize: 20, color: '#999', fontWeight: 'bold' },
+  loadingBox: { padding: 30, alignItems: 'center' },
+  loadingText: { marginTop: 10, color: '#666' },
+  emptyListText: { textAlign: 'center', color: '#888', marginVertical: 20, paddingHorizontal: 10 },
+  deviceItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginVertical: 12,
-  },
-  copiesLabel: {
-    fontSize: 14,
-    color: '#333',
-  },
-  counterGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  btnCounter: {
-    backgroundColor: '#0088cc',
-    width: 36,
-    height: 36,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  btnCounterText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  counterValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginHorizontal: 16,
-    color: '#000',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-  btnCancel: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    backgroundColor: '#fff',
     paddingVertical: 12,
-    marginRight: 8,
-    borderRadius: 6,
-    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
-  btnCancelText: {
-    color: '#555',
-    fontWeight: 'bold',
-  },
-  btnPrint: {
-    flex: 1,
-    backgroundColor: '#0088cc',
-    paddingVertical: 12,
-    marginLeft: 8,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  btnPrintText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
+  deviceName: { fontSize: 15, fontWeight: 'bold', color: '#333' },
+  deviceAddress: { fontSize: 12, color: '#888', marginTop: 2 },
+  btnConnectText: { color: '#0088cc', fontWeight: 'bold', fontSize: 13 },
+  btnRefresh: { backgroundColor: '#f0f4f8', paddingVertical: 12, borderRadius: 6, alignItems: 'center', marginTop: 12 },
+  btnRefreshText: { color: '#0088cc', fontWeight: 'bold' },
 });
