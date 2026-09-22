@@ -27,267 +27,60 @@ jobs:
       - name: Create package.json if missing
         run: |
           if [ ! -f "package.json" ]; then
-            cat > package.json <<'EOF'
-            {
-              "name": "aplikasiprinter",
-              "version": "1.0.0",
-              "private": true,
-              "scripts": {
-                "start": "react-native start"
-              },
-              "dependencies": {
-                "react": "18.2.0",
-                "react-native": "0.72.6"
-              }
-            }
-            EOF
+            echo '{"name":"aplikasiprinter","version":"1.0.0","private":true,"scripts":{"start":"react-native start"},"dependencies":{"react":"18.2.0","react-native":"0.72.6"}}' > package.json
           fi
 
       - name: Create index.js if missing
         run: |
           if [ ! -f "index.js" ]; then
-            cat > index.js <<'EOF'
-            import { AppRegistry } from 'react-native';
-            import App from './App';
-
-            AppRegistry.registerComponent('aplikasiprinter', () => App);
-            EOF
+            echo -e "import { AppRegistry } from 'react-native';\nimport App from './App';\nAppRegistry.registerComponent('aplikasiprinter', () => App);" > index.js
           fi
 
       - name: Install Dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Generate Android Project Structure
+      - name: Generate Android Skeleton
         run: |
           if [ ! -d "android" ]; then
             mkdir -p android/app/src/main/java/com/aplikasiprinter
             mkdir -p android/app/src/main/res/values
-            mkdir -p android/app/src/main/res/mipmap-hdpi
             mkdir -p android/gradle/wrapper
 
             # settings.gradle
-            cat > android/settings.gradle <<'EOF'
-            rootProject.name = 'aplikasiprinter'
-            apply from: file("../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesSettingsGradle(settings)
-            include ':app'
-            EOF
+            echo "rootProject.name = 'aplikasiprinter'" > android/settings.gradle
+            echo "apply from: file('../node_modules/@react-native-community/cli-platform-android/native_modules.gradle'); applyNativeModulesSettingsGradle(settings)" >> android/settings.gradle
+            echo "include ':app'" >> android/settings.gradle
 
             # build.gradle root
-            cat > android/build.gradle <<'EOF'
-            buildscript {
-                ext {
-                    buildToolsVersion = "33.0.0"
-                    minSdkVersion = 21
-                    compileSdkVersion = 33
-                    targetSdkVersion = 33
-                    ndkVersion = "23.1.7779620"
-                }
-                repositories {
-                    google()
-                    mavenCentral()
-                }
-                dependencies {
-                    classpath("com.android.tools.build:gradle:7.4.2")
-                    classpath("com.facebook.react:react-native-gradle-plugin")
-                }
-            }
-            allprojects {
-                repositories {
-                    google()
-                    mavenCentral()
-                    maven { url 'https://www.jitpack.io' }
-                }
-            }
-            EOF
+            echo "buildscript { ext { buildToolsVersion = '33.0.0'; minSdkVersion = 21; compileSdkVersion = 33; targetSdkVersion = 33; ndkVersion = '23.1.7779620' }; repositories { google(); mavenCentral() }; dependencies { classpath('com.android.tools.build:gradle:7.4.2'); classpath('com.facebook.react:react-native-gradle-plugin') } }" > android/build.gradle
+            echo "allprojects { repositories { google(); mavenCentral(); maven { url 'https://www.jitpack.io' } } }" >> android/build.gradle
 
             # gradle-wrapper.properties
-            cat > android/gradle/wrapper/gradle-wrapper.properties <<'EOF'
-            distributionBase=GRADLE_USER_HOME
-            distributionPath=wrapper/dists
-            distributionUrl=https\://services.gradle.org/distributions/gradle-8.0.1-bin.zip
-            networkTimeout=10000
-            validateDistributionUrl=true
-            zipStoreBase=GRADLE_USER_HOME
-            zipStorePath=wrapper/dists
-            EOF
+            echo -e "distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https\://services.gradle.org/distributions/gradle-8.0.1-bin.zip\nnetworkTimeout=10000\nvalidateDistributionUrl=true\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists" > android/gradle/wrapper/gradle-wrapper.properties
 
             # app/build.gradle
-            cat > android/app/build.gradle <<'EOF'
-            apply plugin: "com.android.application"
-            apply plugin: "com.facebook.react"
-
-            android {
-                ndkVersion rootProject.ext.ndkVersion
-                compileSdkVersion rootProject.ext.compileSdkVersion
-                namespace "com.aplikasiprinter"
-
-                defaultConfig {
-                    applicationId "com.aplikasiprinter"
-                    minSdkVersion rootProject.ext.minSdkVersion
-                    targetSdkVersion rootProject.ext.targetSdkVersion
-                    versionCode 1
-                    versionName "1.0"
-                }
-                signingConfigs {
-                    debug {
-                        storeFile file('debug.keystore')
-                        storePassword 'android'
-                        keyAlias 'androiddebugkey'
-                        keyPassword 'android'
-                    }
-                }
-                buildTypes {
-                    debug {
-                        signingConfig signingConfigs.debug
-                    }
-                    release {
-                        signingConfig signingConfigs.debug
-                        minifyEnabled false
-                        proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
-                    }
-                }
-            }
-
-            dependencies {
-                implementation("com.facebook.react:react-android")
-                implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.0.0")
-            }
-
-            apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
-            EOF
+            echo "apply plugin: 'com.android.application'" > android/app/build.gradle
+            echo "apply plugin: 'com.facebook.react'" >> android/app/build.gradle
+            echo "android { ndkVersion rootProject.ext.ndkVersion; compileSdkVersion rootProject.ext.compileSdkVersion; namespace 'com.aplikasiprinter'; defaultConfig { applicationId 'com.aplikasiprinter'; minSdkVersion rootProject.ext.minSdkVersion; targetSdkVersion rootProject.ext.targetSdkVersion; versionCode 1; versionName '1.0' }; signingConfigs { debug { storeFile file('debug.keystore'); storePassword 'android'; keyAlias 'androiddebugkey'; keyPassword 'android' } }; buildTypes { debug { signingConfig signingConfigs.debug }; release { signingConfig signingConfigs.debug; minifyEnabled false; proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro' } } }" >> android/app/build.gradle
+            echo "dependencies { implementation('com.facebook.react:react-android'); implementation('androidx.swiperefreshlayout:swiperefreshlayout:1.0.0') }" >> android/app/build.gradle
+            echo "apply from: file('../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle'); applyNativeModulesAppBuildGradle(project)" >> android/app/build.gradle
 
             # AndroidManifest.xml
-            cat > android/app/src/main/AndroidManifest.xml <<'EOF'
-            <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-                <uses-permission android:name="android.permission.INTERNET" />
-                <uses-permission android:name="android.permission.BLUETOOTH" />
-                <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-                <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-                <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-                <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-                <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-
-                <application
-                  android:name=".MainApplication"
-                  android:label="Aplikasi Printer"
-                  android:allowBackup="false"
-                  android:theme="@style/AppTheme">
-                  <activity
-                    android:name=".MainActivity"
-                    android:label="Aplikasi Printer"
-                    android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
-                    android:launchMode="singleTask"
-                    android:windowSoftInputMode="adjustResize"
-                    android:exported="true">
-                    <intent-filter>
-                        <action android:name="android.intent.action.MAIN" />
-                        <category android:name="android.intent.category.LAUNCHER" />
-                    </intent-filter>
-                  </activity>
-                </application>
-            </manifest>
-            EOF
+            echo '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET" /><uses-permission android:name="android.permission.BLUETOOTH" /><uses-permission android:name="android.permission.BLUETOOTH_ADMIN" /><uses-permission android:name="android.permission.BLUETOOTH_CONNECT" /><uses-permission android:name="android.permission.BLUETOOTH_SCAN" /><uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /><uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /><application android:name=".MainApplication" android:label="Aplikasi Printer" android:allowBackup="false" android:theme="@style/AppTheme"><activity android:name=".MainActivity" android:label="Aplikasi Printer" android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity></application></manifest>' > android/app/src/main/AndroidManifest.xml
 
             # styles.xml
-            cat > android/app/src/main/res/values/styles.xml <<'EOF'
-            <resources>
-                <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-                </style>
-            </resources>
-            EOF
+            echo '<resources><style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar"></style></resources>' > android/app/src/main/res/values/styles.xml
 
             # MainActivity.java
-            cat > android/app/src/main/java/com/aplikasiprinter/MainActivity.java <<'EOF'
-            package com.aplikasiprinter;
-
-            import com.facebook.react.ReactActivity;
-            import com.facebook.react.ReactActivityDelegate;
-            import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
-            import com.facebook.react.defaults.DefaultReactActivityDelegate;
-
-            public class MainActivity extends ReactActivity {
-              @Override
-              protected String getMainComponentName() {
-                return "aplikasiprinter";
-              }
-
-              @Override
-              protected ReactActivityDelegate createReactActivityDelegate() {
-                return new DefaultReactActivityDelegate(
-                    this,
-                    getMainComponentName(),
-                    DefaultNewArchitectureEntryPoint.getFabricEnabled());
-              }
-            }
-            EOF
+            echo -e "package com.aplikasiprinter;\n\nimport com.facebook.react.ReactActivity;\nimport com.facebook.react.ReactActivityDelegate;\nimport com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;\nimport com.facebook.react.defaults.DefaultReactActivityDelegate;\n\npublic class MainActivity extends ReactActivity {\n  @Override\n  protected String getMainComponentName() {\n    return \"aplikasiprinter\";\n  }\n\n  @Override\n  protected ReactActivityDelegate createReactActivityDelegate() {\n    return new DefaultReactActivityDelegate(\n        this,\n        getMainComponentName(),\n        DefaultNewArchitectureEntryPoint.getFabricEnabled());\n  }\n}" > android/app/src/main/java/com/aplikasiprinter/MainActivity.java
 
             # MainApplication.java
-            cat > android/app/src/main/java/com/aplikasiprinter/MainApplication.java <<'EOF'
-            package com.aplikasiprinter;
-
-            import android.app.Application;
-            import com.facebook.react.PackageList;
-            import com.facebook.react.ReactApplication;
-            import com.facebook.react.ReactNativeHost;
-            import com.facebook.react.ReactPackage;
-            import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
-            import com.facebook.react.defaults.DefaultReactNativeHost;
-            import com.facebook.soloader.SoLoader;
-            import java.util.List;
-
-            public class MainApplication extends Application implements ReactApplication {
-
-              private final ReactNativeHost mReactNativeHost =
-                  new DefaultReactNativeHost(this) {
-                    @Override
-                    public boolean getUseDeveloperSupport() {
-                      return BuildConfig.DEBUG;
-                    }
-
-                    @Override
-                    protected List<ReactPackage> getPackages() {
-                      @SuppressWarnings("UnnecessaryLocalVariable")
-                      List<ReactPackage> packages = new PackageList(this).getPackages();
-                      packages.add(new CustomPrinterPackage());
-                      return packages;
-                    }
-
-                    @Override
-                    protected String getJSMainModuleName() {
-                      return "index";
-                    }
-
-                    @Override
-                    protected boolean isNewArchEnabled() {
-                      return BuildConfig.IS_NEW_ARCHITECTURE_ENABLED;
-                    }
-
-                    @Override
-                    protected Boolean isHermesEnabled() {
-                      return BuildConfig.IS_HERMES_ENABLED;
-                    }
-                  };
-
-              @Override
-              public ReactNativeHost getReactNativeHost() {
-                return mReactNativeHost;
-              }
-
-              @Override
-              public void onCreate() {
-                super.onCreate();
-                SoLoader.init(this, /* native exopackage */ false);
-                if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
-                  DefaultNewArchitectureEntryPoint.load();
-                }
-              }
-            }
-            EOF
+            echo -e "package com.aplikasiprinter;\n\nimport android.app.Application;\nimport com.facebook.react.PackageList;\nimport com.facebook.react.ReactApplication;\nimport com.facebook.react.ReactNativeHost;\nimport com.facebook.react.ReactPackage;\nimport com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;\nimport com.facebook.react.defaults.DefaultReactNativeHost;\nimport com.facebook.soloader.SoLoader;\nimport java.util.List;\n\npublic class MainApplication extends Application implements ReactApplication {\n  private final ReactNativeHost mReactNativeHost =\n      new DefaultReactNativeHost(this) {\n        @Override\n        public boolean getUseDeveloperSupport() {\n          return BuildConfig.DEBUG;\n        }\n\n        @Override\n        protected List<ReactPackage> getPackages() {\n          List<ReactPackage> packages = new PackageList(this).getPackages();\n          packages.add(new CustomPrinterPackage());\n          return packages;\n        }\n\n        @Override\n        protected String getJSMainModuleName() {\n          return \"index\";\n        }\n\n        @Override\n        protected boolean isNewArchEnabled() {\n          return BuildConfig.IS_NEW_ARCHITECTURE_ENABLED;\n        }\n\n        @Override\n        protected Boolean isHermesEnabled() {\n          return BuildConfig.IS_HERMES_ENABLED;\n        }\n      };\n\n  @Override\n  public ReactNativeHost getReactNativeHost() {\n    return mReactNativeHost;\n  }\n\n  @Override\n  public void onCreate() {\n    super.onCreate();\n    SoLoader.init(this, false);\n    if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {\n      DefaultNewArchitectureEntryPoint.load();\n    }\n  }\n}" > android/app/src/main/java/com/aplikasiprinter/MainApplication.java
 
             # Keytool Debug Keystore
             keytool -genkey -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
             
-            # Install Gradle Wrapper Jar
+            # Setup Wrapper
             cd android
             npm exec gradle wrapper
           fi
@@ -295,332 +88,12 @@ jobs:
       - name: Create CustomPrinterModule Java File
         run: |
           mkdir -p android/app/src/main/java/com/aplikasiprinter
-          cat > android/app/src/main/java/com/aplikasiprinter/CustomPrinterModule.java <<'EOF'
-          package com.aplikasiprinter;
-
-          import android.bluetooth.BluetoothAdapter;
-          import android.bluetooth.BluetoothDevice;
-          import android.bluetooth.BluetoothSocket;
-          import android.graphics.Bitmap;
-          import android.graphics.Color;
-          import android.graphics.Matrix;
-          import android.graphics.pdf.PdfRenderer;
-          import android.net.Uri;
-          import android.os.ParcelFileDescriptor;
-
-          import com.facebook.react.bridge.Arguments;
-          import com.facebook.react.bridge.Promise;
-          import com.facebook.react.bridge.ReactApplicationContext;
-          import com.facebook.react.bridge.ReactContextBaseJavaModule;
-          import com.facebook.react.bridge.ReactMethod;
-          import com.facebook.react.bridge.WritableArray;
-          import com.facebook.react.bridge.WritableMap;
-          import com.facebook.react.modules.core.DeviceEventManagerModule;
-
-          import java.io.File;
-          import java.io.FileOutputStream;
-          import java.io.InputStream;
-          import java.io.OutputStream;
-          import java.util.Arrays;
-          import java.util.Set;
-          import java.util.UUID;
-
-          public class CustomPrinterModule extends ReactContextBaseJavaModule {
-              private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
-              private boolean isPrintingCanceled = false;
-
-              public CustomPrinterModule(ReactApplicationContext reactContext) {
-                  super(reactContext);
-              }
-
-              @Override
-              public String getName() {
-                  return "CustomPrinter";
-              }
-
-              @ReactMethod
-              public void addListener(String eventName) {
-              }
-
-              @ReactMethod
-              public void removeListeners(Integer count) {
-              }
-
-              private void sendEvent(String eventName, WritableMap params) {
-                  if (getReactApplicationContext().hasActiveCatalystInstance()) {
-                      getReactApplicationContext()
-                          .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                          .emit(eventName, params);
-                  }
-              }
-
-              @ReactMethod
-              public void cancelPrint(Promise promise) {
-                  isPrintingCanceled = true;
-                  promise.resolve("Proses cetak dibatalkan!");
-              }
-
-              @ReactMethod
-              public void getPairedDevices(Promise promise) {
-                  try {
-                      BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-                      if (adapter == null) {
-                          promise.reject("NO_BT", "Bluetooth tidak didukung di HP ini.");
-                          return;
-                      }
-
-                      Set<BluetoothDevice> pairedDevices = adapter.getBondedDevices();
-                      WritableArray deviceList = Arguments.createArray();
-
-                      if (pairedDevices != null) {
-                          for (BluetoothDevice device : pairedDevices) {
-                              WritableMap map = Arguments.createMap();
-                              map.putString("name", device.getName() != null ? device.getName() : "Unknown Printer");
-                              map.putString("address", device.getAddress());
-                              deviceList.pushMap(map);
-                          }
-                      }
-                      promise.resolve(deviceList);
-                  } catch (Exception e) {
-                      promise.reject("SCAN_ERROR", e.getMessage());
-                  }
-              }
-
-              @ReactMethod
-              public void printPdfWithOptions(String uriString, String macAddress, int paperWidthMm, int rotationDegree, int copies, int startPage, Promise promise) {
-                  BluetoothSocket socket = null;
-                  isPrintingCanceled = false;
-
-                  try {
-                      Uri uri = Uri.parse(uriString);
-                      InputStream inputStream = getReactApplicationContext().getContentResolver().openInputStream(uri);
-                      File cacheFile = new File(getReactApplicationContext().getCacheDir(), "temp_print.pdf");
-                      FileOutputStream fos = new FileOutputStream(cacheFile);
-                      byte[] buffer = new byte[1024];
-                      int read;
-                      while ((read = inputStream.read(buffer)) != -1) {
-                          fos.write(buffer, 0, read);
-                      }
-                      fos.close();
-                      inputStream.close();
-
-                      ParcelFileDescriptor pfd = ParcelFileDescriptor.open(cacheFile, ParcelFileDescriptor.MODE_READ_ONLY);
-                      PdfRenderer renderer = new PdfRenderer(pfd);
-                      int pageCount = renderer.getPageCount();
-
-                      int startingIndex = Math.max(0, startPage - 1);
-
-                      BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-                      if (adapter == null || !adapter.isEnabled()) {
-                          renderer.close();
-                          pfd.close();
-                          promise.reject("BT_OFF", "Bluetooth HP belum aktif.");
-                          return;
-                      }
-
-                      BluetoothDevice device = adapter.getRemoteDevice(macAddress);
-                      String deviceName = device.getName() != null ? device.getName().toUpperCase() : "";
-
-                      socket = device.createRfcommSocketToServiceRecord(SPP_UUID);
-                      socket.connect();
-                      OutputStream os = socket.getOutputStream();
-
-                      boolean isLabelPrinter = deviceName.contains("XP") || 
-                                               deviceName.contains("420") || 
-                                               deviceName.contains("LABEL") || 
-                                               deviceName.contains("BARCODE") || 
-                                               deviceName.contains("XPRINTER") || 
-                                               deviceName.contains("TSC") ||
-                                               deviceName.contains("POSTEK");
-
-                      int targetWidthMm = (paperWidthMm > 0) ? paperWidthMm : 78;
-                      int printPixelWidth = targetWidthMm * 8;
-
-                      int lastPrintedPage = startingIndex;
-
-                      for (int p = startingIndex; p < pageCount; p++) {
-                          if (isPrintingCanceled) {
-                              break;
-                          }
-
-                          PdfRenderer.Page page = renderer.openPage(p);
-                          int printPixelHeight = (int) ((float) printPixelWidth / page.getWidth() * page.getHeight());
-
-                          Bitmap pageBitmap = Bitmap.createBitmap(printPixelWidth, printPixelHeight, Bitmap.Config.ARGB_8888);
-                          page.render(pageBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
-                          page.close();
-
-                          Bitmap finalBitmap = pageBitmap;
-                          if (rotationDegree != 0) {
-                              Matrix matrix = new Matrix();
-                              matrix.postRotate(rotationDegree);
-                              finalBitmap = Bitmap.createBitmap(pageBitmap, 0, 0, pageBitmap.getWidth(), pageBitmap.getHeight(), matrix, true);
-                          }
-
-                          if (isLabelPrinter) {
-                              int imgWidth = finalBitmap.getWidth();
-                              int imgHeight = finalBitmap.getHeight();
-                              int widthBytes = (imgWidth + 7) / 8;
-                              int paperHeightMm = (int) Math.ceil((double) imgHeight / 8.0);
-
-                              for (int c = 0; c < copies; c++) {
-                                  if (isPrintingCanceled) break;
-
-                                  String setupCmd = "SIZE " + targetWidthMm + " mm," + paperHeightMm + " mm\r\n"
-                                          + "GAP 2 mm,0 mm\r\n"
-                                          + "DIRECTION 0,0\r\n"
-                                          + "REFERENCE 0,0\r\n"
-                                          + "CLS\r\n"
-                                          + "BITMAP 0,0," + widthBytes + "," + imgHeight + ",0,";
-                                  
-                                  os.write(setupCmd.getBytes("GBK"));
-                                  os.write(convertBitmapToTSPLDataClean(finalBitmap));
-                                  os.write("\r\nPRINT 1,1\r\n".getBytes("GBK"));
-                                  os.flush();
-                              }
-                          } else {
-                              for (int c = 0; c < copies; c++) {
-                                  if (isPrintingCanceled) break;
-
-                                  os.write(new byte[]{0x1B, 0x40});
-                                  os.write(decodeBitmapToESCCommand(finalBitmap));
-                                  os.write(new byte[]{0x1D, 0x56, 0x41, 0x10});
-                                  os.flush();
-                              }
-                          }
-
-                          if (finalBitmap != pageBitmap) {
-                              finalBitmap.recycle();
-                          }
-                          pageBitmap.recycle();
-
-                          lastPrintedPage = p + 1;
-
-                          WritableMap eventMap = Arguments.createMap();
-                          eventMap.putInt("currentPage", lastPrintedPage);
-                          eventMap.putInt("totalPages", pageCount);
-                          sendEvent("onPrintProgress", eventMap);
-                      }
-
-                      renderer.close();
-                      pfd.close();
-                      os.flush();
-                      socket.close();
-
-                      WritableMap resultMap = Arguments.createMap();
-                      resultMap.putInt("lastPrintedPage", lastPrintedPage);
-                      resultMap.putInt("totalPages", pageCount);
-                      resultMap.putBoolean("isCanceled", isPrintingCanceled);
-
-                      promise.resolve(resultMap);
-                  } catch (Exception e) {
-                      if (socket != null) {
-                          try { socket.close(); } catch (Exception ignored) {}
-                      }
-                      promise.reject("PRINT_ERROR", e.getMessage());
-                  }
-              }
-
-              private byte[] convertBitmapToTSPLDataClean(Bitmap bitmap) {
-                  int width = bitmap.getWidth();
-                  int height = bitmap.getHeight();
-                  int widthBytes = (width + 7) / 8;
-                  byte[] data = new byte[widthBytes * height];
-
-                  Arrays.fill(data, (byte) 0xFF);
-
-                  int index = 0;
-                  for (int y = 0; y < height; y++) {
-                      for (int x = 0; x < widthBytes; x++) {
-                          byte b = 0;
-                          for (int bit = 0; bit < 8; bit++) {
-                              int posX = x * 8 + bit;
-                              if (posX < width) {
-                                  int pixel = bitmap.getPixel(posX, y);
-                                  int r = Color.red(pixel);
-                                  int g = Color.green(pixel);
-                                  int bVal = Color.blue(pixel);
-                                  if ((r + g + bVal) / 3 >= 128) {
-                                      b |= (1 << (7 - bit));
-                                  }
-                              } else {
-                                  b |= (1 << (7 - bit));
-                              }
-                          }
-                          data[index++] = b;
-                      }
-                  }
-                  return data;
-              }
-
-              private byte[] decodeBitmapToESCCommand(Bitmap bmp) {
-                  int width = bmp.getWidth();
-                  int height = bmp.getHeight();
-                  int bwWidth = (width + 7) / 8;
-                  byte[] stream = new byte[(bwWidth + 8) * height + 8];
-
-                  int k = 0;
-                  stream[k++] = 0x1D;
-                  stream[k++] = 0x76;
-                  stream[k++] = 0x30;
-                  stream[k++] = 0x00;
-                  stream[k++] = (byte) (bwWidth % 256);
-                  stream[k++] = (byte) (bwWidth / 256);
-                  stream[k++] = (byte) (height % 256);
-                  stream[k++] = (byte) (height / 256);
-
-                  for (int i = 0; i < height; i++) {
-                      for (int j = 0; j < bwWidth; j++) {
-                          byte b = 0;
-                          for (int p = 0; p < 8; p++) {
-                              int posX = j * 8 + p;
-                              if (posX < width) {
-                                  int pixel = bmp.getPixel(posX, i);
-                                  int r = Color.red(pixel);
-                                  int g = Color.green(pixel);
-                                  int bVal = Color.blue(pixel);
-                                  if ((r + g + bVal) / 3 < 128) {
-                                      b |= (byte) (128 >> p);
-                                  }
-                              }
-                          }
-                          stream[k++] = b;
-                      }
-                  }
-                  return stream;
-              }
-          }
-          EOF
+          echo -e "package com.aplikasiprinter;\n\nimport android.bluetooth.BluetoothAdapter;\nimport android.bluetooth.BluetoothDevice;\nimport android.bluetooth.BluetoothSocket;\nimport android.graphics.Bitmap;\nimport android.graphics.Color;\nimport android.graphics.Matrix;\nimport android.graphics.pdf.PdfRenderer;\nimport android.net.Uri;\nimport android.os.ParcelFileDescriptor;\nimport com.facebook.react.bridge.Arguments;\nimport com.facebook.react.bridge.Promise;\nimport com.facebook.react.bridge.ReactApplicationContext;\nimport com.facebook.react.bridge.ReactContextBaseJavaModule;\nimport com.facebook.react.bridge.ReactMethod;\nimport com.facebook.react.bridge.WritableArray;\nimport com.facebook.react.bridge.WritableMap;\nimport com.facebook.react.modules.core.DeviceEventManagerModule;\nimport java.io.File;\nimport java.io.FileOutputStream;\nimport java.io.InputStream;\nimport java.io.OutputStream;\nimport java.util.Arrays;\nimport java.util.Set;\nimport java.util.UUID;\n\npublic class CustomPrinterModule extends ReactContextBaseJavaModule {\n    private static final UUID SPP_UUID = UUID.fromString(\"00001101-0000-1000-8000-00805F9B34FB\");\n    private boolean isPrintingCanceled = false;\n\n    public CustomPrinterModule(ReactApplicationContext reactContext) {\n        super(reactContext);\n    }\n\n    @Override\n    public String getName() {\n        return \"CustomPrinter\";\n    }\n\n    @ReactMethod public void addListener(String eventName) {}\n    @ReactMethod public void removeListeners(Integer count) {}\n\n    private void sendEvent(String eventName, WritableMap params) {\n        if (getReactApplicationContext().hasActiveCatalystInstance()) {\n            getReactApplicationContext().getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName, params);\n        }\n    }\n\n    @ReactMethod\n    public void cancelPrint(Promise promise) {\n        isPrintingCanceled = true;\n        promise.resolve(\"Proses cetak dibatalkan!\");\n    }\n\n    @ReactMethod\n    public void getPairedDevices(Promise promise) {\n        try {\n            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();\n            if (adapter == null) {\n                promise.reject(\"NO_BT\", \"Bluetooth tidak didukung di HP ini.\");\n                return;\n            }\n            Set<BluetoothDevice> pairedDevices = adapter.getBondedDevices();\n            WritableArray deviceList = Arguments.createArray();\n            if (pairedDevices != null) {\n                for (BluetoothDevice device : pairedDevices) {\n                    WritableMap map = Arguments.createMap();\n                    map.putString(\"name\", device.getName() != null ? device.getName() : \"Unknown Printer\");\n                    map.putString(\"address\", device.getAddress());\n                    deviceList.pushMap(map);\n                }\n            }\n            promise.resolve(deviceList);\n        } catch (Exception e) {\n            promise.reject(\"SCAN_ERROR\", e.getMessage());\n        }\n    }\n\n    @ReactMethod\n    public void printPdfWithOptions(String uriString, String macAddress, int paperWidthMm, int rotationDegree, int copies, int startPage, Promise promise) {\n        BluetoothSocket socket = null;\n        isPrintingCanceled = false;\n        try {\n            Uri uri = Uri.parse(uriString);\n            InputStream inputStream = getReactApplicationContext().getContentResolver().openInputStream(uri);\n            File cacheFile = new File(getReactApplicationContext().getCacheDir(), \"temp_print.pdf\");\n            FileOutputStream fos = new FileOutputStream(cacheFile);\n            byte[] buffer = new byte[1024];\n            int read;\n            while ((read = inputStream.read(buffer)) != -1) {\n                fos.write(buffer, 0, read);\n            }\n            fos.close();\n            inputStream.close();\n            ParcelFileDescriptor pfd = ParcelFileDescriptor.open(cacheFile, ParcelFileDescriptor.MODE_READ_ONLY);\n            PdfRenderer renderer = new PdfRenderer(pfd);\n            int pageCount = renderer.getPageCount();\n            int startingIndex = Math.max(0, startPage - 1);\n            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();\n            if (adapter == null || !adapter.isEnabled()) {\n                renderer.close(); pfd.close();\n                promise.reject(\"BT_OFF\", \"Bluetooth HP belum aktif.\");\n                return;\n            }\n            BluetoothDevice device = adapter.getRemoteDevice(macAddress);\n            String deviceName = device.getName() != null ? device.getName().toUpperCase() : \"\";\n            socket = device.createRfcommSocketToServiceRecord(SPP_UUID);\n            socket.connect();\n            OutputStream os = socket.getOutputStream();\n            boolean isLabelPrinter = deviceName.contains(\"XP\") || deviceName.contains(\"420\") || deviceName.contains(\"LABEL\") || deviceName.contains(\"BARCODE\") || deviceName.contains(\"XPRINTER\") || deviceName.contains(\"TSC\") || deviceName.contains(\"POSTEK\");\n            int targetWidthMm = (paperWidthMm > 0) ? paperWidthMm : 78;\n            int printPixelWidth = targetWidthMm * 8;\n            int lastPrintedPage = startingIndex;\n            for (int p = startingIndex; p < pageCount; p++) {\n                if (isPrintingCanceled) break;\n                PdfRenderer.Page page = renderer.openPage(p);\n                int printPixelHeight = (int) ((float) printPixelWidth / page.getWidth() * page.getHeight());\n                Bitmap pageBitmap = Bitmap.createBitmap(printPixelWidth, printPixelHeight, Bitmap.Config.ARGB_8888);\n                page.render(pageBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);\n                page.close();\n                Bitmap finalBitmap = pageBitmap;\n                if (rotationDegree != 0) {\n                    Matrix matrix = new Matrix();\n                    matrix.postRotate(rotationDegree);\n                    finalBitmap = Bitmap.createBitmap(pageBitmap, 0, 0, pageBitmap.getWidth(), pageBitmap.getHeight(), matrix, true);\n                }\n                if (isLabelPrinter) {\n                    int imgWidth = finalBitmap.getWidth();\n                    int imgHeight = finalBitmap.getHeight();\n                    int widthBytes = (imgWidth + 7) / 8;\n                    int paperHeightMm = (int) Math.ceil((double) imgHeight / 8.0);\n                    for (int c = 0; c < copies; c++) {\n                        if (isPrintingCanceled) break;\n                        String setupCmd = \"SIZE \" + targetWidthMm + \" mm,\" + paperHeightMm + \" mm\\r\\nGAP 2 mm,0 mm\\r\\nDIRECTION 0,0\\r\\nREFERENCE 0,0\\r\\nCLS\\r\\nBITMAP 0,0,\" + widthBytes + \",\" + imgHeight + \",0,\";\n                        os.write(setupCmd.getBytes(\"GBK\"));\n                        os.write(convertBitmapToTSPLDataClean(finalBitmap));\n                        os.write(\"\\r\\nPRINT 1,1\\r\\n\".getBytes(\"GBK\"));\n                        os.flush();\n                    }\n                } else {\n                    for (int c = 0; c < copies; c++) {\n                        if (isPrintingCanceled) break;\n                        os.write(new byte[]{0x1B, 0x40});\n                        os.write(decodeBitmapToESCCommand(finalBitmap));\n                        os.write(new byte[]{0x1D, 0x56, 0x41, 0x10});\n                        os.flush();\n                    }\n                }\n                if (finalBitmap != pageBitmap) finalBitmap.recycle();\n                pageBitmap.recycle();\n                lastPrintedPage = p + 1;\n                WritableMap eventMap = Arguments.createMap();\n                eventMap.putInt(\"currentPage\", lastPrintedPage);\n                eventMap.putInt(\"totalPages\", pageCount);\n                sendEvent(\"onPrintProgress\", eventMap);\n            }\n            renderer.close(); pfd.close(); os.flush(); socket.close();\n            WritableMap resultMap = Arguments.createMap();\n            resultMap.putInt(\"lastPrintedPage\", lastPrintedPage);\n            resultMap.putInt(\"totalPages\", pageCount);\n            resultMap.putBoolean(\"isCanceled\", isPrintingCanceled);\n            promise.resolve(resultMap);\n        } catch (Exception e) {\n            if (socket != null) { try { socket.close(); } catch (Exception ignored) {} }\n            promise.reject(\"PRINT_ERROR\", e.getMessage());\n        }\n    }\n\n    private byte[] convertBitmapToTSPLDataClean(Bitmap bitmap) {\n        int width = bitmap.getWidth();\n        int height = bitmap.getHeight();\n        int widthBytes = (width + 7) / 8;\n        byte[] data = new byte[widthBytes * height];\n        Arrays.fill(data, (byte) 0xFF);\n        int index = 0;\n        for (int y = 0; y < height; y++) {\n            for (int x = 0; x < widthBytes; x++) {\n                byte b = 0;\n                for (int bit = 0; bit < 8; bit++) {\n                    int posX = x * 8 + bit;\n                    if (posX < width) {\n                        int pixel = bitmap.getPixel(posX, y);\n                        if ((Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3 >= 128) {\n                            b |= (1 << (7 - bit));\n                        }\n                    } else { b |= (1 << (7 - bit)); }\n                }\n                data[index++] = b;\n            }\n        }\n        return data;\n    }\n\n    private byte[] decodeBitmapToESCCommand(Bitmap bmp) {\n        int width = bmp.getWidth();\n        int height = bmp.getHeight();\n        int bwWidth = (width + 7) / 8;\n        byte[] stream = new byte[(bwWidth + 8) * height + 8];\n        int k = 0;\n        stream[k++] = 0x1D; stream[k++] = 0x76; stream[k++] = 0x30; stream[k++] = 0x00;\n        stream[k++] = (byte) (bwWidth % 256); stream[k++] = (byte) (bwWidth / 256);\n        stream[k++] = (byte) (height % 256); stream[k++] = (byte) (height / 256);\n        for (int i = 0; i < height; i++) {\n            for (int j = 0; j < bwWidth; j++) {\n                byte b = 0;\n                for (int p = 0; p < 8; p++) {\n                    int posX = j * 8 + p;\n                    if (posX < width) {\n                        int pixel = bmp.getPixel(posX, i);\n                        if ((Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3 < 128) {\n                            b |= (byte) (128 >> p);\n                        }\n                    }\n                }\n                stream[k++] = b;\n            }\n        }\n        return stream;\n    }\n}" > android/app/src/main/java/com/aplikasiprinter/CustomPrinterModule.java
 
       - name: Create CustomPrinterPackage Java File
         run: |
           mkdir -p android/app/src/main/java/com/aplikasiprinter
-          cat > android/app/src/main/java/com/aplikasiprinter/CustomPrinterPackage.java <<'EOF'
-          package com.aplikasiprinter;
-
-          import com.facebook.react.ReactPackage;
-          import com.facebook.react.bridge.NativeModule;
-          import com.facebook.react.bridge.ReactApplicationContext;
-          import com.facebook.react.uimanager.ViewManager;
-
-          import java.util.ArrayList;
-          import java.util.Collections;
-          import java.util.List;
-
-          public class CustomPrinterPackage implements ReactPackage {
-              @Override
-              public List<ViewManager> createViewManagers(ReactApplicationContext reactContext) {
-                  return Collections.emptyList();
-              }
-
-              @Override
-              public List<NativeModule> createNativeModules(ReactApplicationContext reactContext) {
-                  List<NativeModule> modules = new ArrayList<>();
-                  modules.add(new CustomPrinterModule(reactContext));
-                  return modules;
-              }
-          }
-          EOF
+          echo -e "package com.aplikasiprinter;\n\nimport com.facebook.react.ReactPackage;\nimport com.facebook.react.bridge.NativeModule;\nimport com.facebook.react.bridge.ReactApplicationContext;\nimport com.facebook.react.uimanager.ViewManager;\nimport java.util.ArrayList;\nimport java.util.Collections;\nimport java.util.List;\n\npublic class CustomPrinterPackage implements ReactPackage {\n    @Override\n    public List<ViewManager> createViewManagers(ReactApplicationContext reactContext) {\n        return Collections.emptyList();\n    }\n    @Override\n    public List<NativeModule> createNativeModules(ReactApplicationContext reactContext) {\n        List<NativeModule> modules = new ArrayList<>();\n        modules.add(new CustomPrinterModule(reactContext));\n        return modules;\n    }\n}" > android/app/src/main/java/com/aplikasiprinter/CustomPrinterPackage.java
 
       - name: Make Gradle Executable
         run: chmod +x android/gradlew
