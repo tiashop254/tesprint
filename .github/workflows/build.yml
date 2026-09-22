@@ -26,13 +26,18 @@ jobs:
 
       - name: Initialize React Native App
         run: |
-          # Paksa git untuk selalu menggunakan HTTPS daripada SSH
+          # Paksa Git & NPM menggunakan HTTPS penuh untuk SSH / Git Protocol
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://".insteadOf "git://"
+
           npx react-native@0.72.6 init AplikasiPrinter --version 0.72.6 --skip-install
           cd AplikasiPrinter
+          
           npm install --legacy-peer-deps
-          npm install https://github.com/tiasho/react-native-bluetooth-escpos-printer.git --save --legacy-peer-deps
+          
+          # Install via tarball release/https direct
+          npm install github:tiasho/react-native-bluetooth-escpos-printer --save --legacy-peer-deps
           
           # Buat file App.tsx dengan kode printer
           cat << 'EOF' > App.tsx
