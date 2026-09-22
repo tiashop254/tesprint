@@ -27,20 +27,53 @@ jobs:
 
       - name: Auto Generate Project Files
         run: |
-          echo "🚀 Inisialisasi React Native & menyalin App.js..."
+          echo "🚀 Inisialisasi React Native..."
 
-          # Inisialisasi React Native
           npx react-native@0.72.6 init AplikasiPrinter --version 0.72.6 --skip-install
           cd AplikasiPrinter
-          npm install react-native-document-picker --save --legacy-peer-deps
+          npm install react-native-document-picker react-native-pdf react-native-blob-util --save --legacy-peer-deps
 
-          # Salin file App.js dari repository kamu
           cp ../App.js ./App.js
 
-          # Buat Folder Native Java
+          # Manifest dengan izin lengkap
+          cat > android/app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+            package="com.aplikasiprinter">
+
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.BLUETOOTH" />
+              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+              <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+              <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+              <application
+                android:name=".MainApplication"
+                android:label="ThermalPrinter"
+                android:icon="@mipmap/ic_launcher"
+                android:roundIcon="@mipmap/ic_launcher_round"
+                android:allowBackup="false"
+                android:theme="@style/AppTheme">
+                <activity
+                  android:name=".MainActivity"
+                  android:label="ThermalPrinter"
+                  android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+                  android:launchMode="singleTask"
+                  android:windowSoftInputMode="adjustResize"
+                  android:exported="true">
+                  <intent-filter>
+                      <action android:name="android.intent.action.MAIN" />
+                      <category android:name="android.intent.category.LAUNCHER" />
+                  </intent-filter>
+                </activity>
+              </application>
+          </manifest>
+          EOF
+
           mkdir -p android/app/src/main/java/com/aplikasiprinter
 
-          # CustomPrinterModule.java
+          # CustomPrinterModule.java dengan opsi Rotasi, Width mm, & Jumlah Copies
           cat > android/app/src/main/java/com/aplikasiprinter/CustomPrinterModule.java <<'EOF'
           package com.aplikasiprinter;
 
@@ -48,7 +81,9 @@ jobs:
           import android.bluetooth.BluetoothDevice;
           import android.bluetooth.BluetoothSocket;
           import android.graphics.Bitmap;
+          import android.graphics.Canvas;
           import android.graphics.Color;
+          import android.graphics.Matrix;
           import android.graphics.pdf.PdfRenderer;
           import android.net.Uri;
           import android.os.ParcelFileDescriptor;
@@ -76,7 +111,7 @@ jobs:
               }
 
               @ReactMethod
-              public void printPdfUri(String uriString, String macAddress, Promise promise) {
+              public void printPdfWithOptions(String uriString, String macAddress, int paperWidthMm, int rotationDegree, int copies, Promise promise) {
                   BluetoothSocket socket = null;
                   try {
                       Uri uri = Uri.parse(uriString);
@@ -95,37 +130,55 @@ jobs:
                       PdfRenderer renderer = new PdfRenderer(pfd);
                       PdfRenderer.Page page = renderer.openPage(0);
 
-                      int width = 384;
-                      int height = (int) ((float) width / page.getWidth() * page.getHeight());
+                      // Konversi Lebar mm ke Pixel Dot Thermal (8 dots/mm)
+                      int printPixelWidth = paperWidthMm * 8;
+                      if (printPixelWidth <= 0) printPixelWidth = 384; // default 58mm
 
-                      Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-                      page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                      int height = (int) ((float) printPixelWidth / page.getWidth() * page.getHeight());
+
+                      Bitmap originalBitmap = Bitmap.createBitmap(printPixelWidth, height, Bitmap.Config.ARGB_8888);
+                      page.render(originalBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
                       page.close();
                       renderer.close();
                       pfd.close();
 
+                      // Terapkan Rotasi (0, 90, 180, 270)
+                      Bitmap finalBitmap = originalBitmap;
+                      if (rotationDegree != 0) {
+                          Matrix matrix = new Matrix();
+                          matrix.postRotate(rotationDegree);
+                          finalBitmap = Bitmap.createBitmap(originalBitmap, 0, 0, originalBitmap.getWidth(), originalBitmap.getHeight(), matrix, true);
+                      }
+
                       BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
                       if (adapter == null) {
-                          promise.reject("NO_BT", "Bluetooth tidak aktif");
+                          promise.reject("NO_BT", "Perangkat tidak mendukung Bluetooth.");
+                          return;
+                      }
+
+                      if (!adapter.isEnabled()) {
+                          promise.reject("BT_OFF", "Bluetooth HP belum aktif.");
                           return;
                       }
 
                       BluetoothDevice device = adapter.getRemoteDevice(macAddress);
                       socket = device.createRfcommSocketToServiceRecord(SPP_UUID);
-                      adapter.cancelDiscovery();
                       socket.connect();
 
                       OutputStream os = socket.getOutputStream();
-                      os.write(new byte[]{0x1B, 0x40});
-
-                      byte[] printImageBytes = decodeBitmapToESCCommand(bitmap);
-                      os.write(printImageBytes);
-                      os.write(new byte[]{0x1D, 0x56, 0x41, 0x10});
+                      
+                      // Cetak sesuai jumlah eksemplar (copies)
+                      for (int c = 0; c < copies; c++) {
+                          os.write(new byte[]{0x1B, 0x40}); // Initialize printer
+                          byte[] printImageBytes = decodeBitmapToESCCommand(finalBitmap);
+                          os.write(printImageBytes);
+                          os.write(new byte[]{0x1D, 0x56, 0x41, 0x10}); // Cut paper / feed
+                      }
 
                       os.flush();
                       socket.close();
 
-                      promise.resolve("Resi PDF Berhasil Dicetak!");
+                      promise.resolve("Resi PDF Berhasil Dicetak (" + copies + "x)!");
                   } catch (Exception e) {
                       if (socket != null) {
                           try { socket.close(); } catch (Exception ignored) {}
@@ -209,7 +262,7 @@ jobs:
           import com.facebook.react.PackageList;
           import com.facebook.react.ReactApplication;
           import com.facebook.react.ReactNativeHost;
-          import com.facebook.react.ReactPackage;
+          import.facebook.react.ReactPackage;
           import com.facebook.soloader.SoLoader;
           import java.util.List;
 
