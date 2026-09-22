@@ -2,7 +2,9 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+
   workflow_dispatch:
 
 jobs:
@@ -10,81 +12,181 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
+      # ==============================
+      # 1. Checkout Repository
+      # ==============================
       - name: Checkout repository
         uses: actions/checkout@v4
 
+
+      # ==============================
+      # 2. Setup Node.js (v18)
+      # ==============================
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
+
+      # ==============================
+      # 3. Setup JDK 17
+      # ==============================
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: zulu
           java-version: '17'
 
+
+      # ==============================
+      # 4. Inisialisasi Project React Native
+      # ==============================
       - name: Initialize React Native App
         run: |
-          npx react-native@0.72.6 init AplikasiPrinter --version 0.72.6 --skip-install
+          npx react-native@0.72.6 init AplikasiPrinter \
+            --version 0.72.6 \
+            --skip-install
+
           cd AplikasiPrinter
-          
           npm install --legacy-peer-deps
-          
-          # Install library printer resmi dari registry NPM (bukan dari GitHub tiasho yang mati)
-          npm install tp-react-native-bluetooth-escpos-printer --save --legacy-peer-deps
-          
-          # Buat file App.tsx dengan kode printer
-          cat << 'EOF' > App.tsx
+
+
+      # ==============================
+      # 5. Install Library Printer Bluetooth
+      # ==============================
+      - name: Install Bluetooth Printer
+        run: |
+          cd AplikasiPrinter
+          npm install tp-react-native-bluetooth-escpos-printer \
+            --save \
+            --legacy-peer-deps
+
+
+      # ==============================
+      # 6. Buat File App.tsx
+      # ==============================
+      - name: Create Printer App
+        run: |
+          cd AplikasiPrinter
+
+          cat > App.tsx <<'EOF'
           import React from 'react';
-          import { SafeAreaView, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
-          import { BluetoothEscposPrinter } from 'tp-react-native-bluetooth-escpos-printer';
+          import {
+            SafeAreaView,
+            StyleSheet,
+            Text,
+            TouchableOpacity,
+            Alert,
+          } from 'react-native';
+          import {
+            BluetoothEscposPrinter,
+          } from 'tp-react-native-bluetooth-escpos-printer';
 
           const App = () => {
             const handlePrint = async () => {
               try {
-                await BluetoothEscposPrinter.printerAlign(BluetoothEscposPrinter.ALIGN.CENTER);
-                await BluetoothEscposPrinter.printText("TES CETAK PRINTER\n\r", {
-                  encoding: 'GBK',
-                  codepage: 0,
-                  widthtimes: 1,
-                  heigthtimes: 1,
-                });
-                await BluetoothEscposPrinter.printText("--------------------------------\n\r", {});
-                await BluetoothEscposPrinter.printText("Berhasil Terhubung!\n\r\n\r", {});
+                await BluetoothEscposPrinter.printerAlign(
+                  BluetoothEscposPrinter.ALIGN.CENTER
+                );
+
+                await BluetoothEscposPrinter.printText(
+                  "TES CETAK PRINTER\n\r",
+                  {
+                    encoding: 'GBK',
+                    codepage: 0,
+                    widthtimes: 1,
+                    heigthtimes: 1,
+                  }
+                );
+
+                await BluetoothEscposPrinter.printText(
+                  "--------------------------------\n\r",
+                  {}
+                );
+
+                await BluetoothEscposPrinter.printText(
+                  "Berhasil Terhubung!\n\r\n\r",
+                  {}
+                );
+
+                Alert.alert(
+                  "Berhasil",
+                  "Perintah cetak sudah dikirim."
+                );
               } catch (error: any) {
-                Alert.alert("Gagal Cetak", error?.toString() || "Error tidak diketahui");
+                Alert.alert(
+                  "Gagal Cetak",
+                  error?.toString() ||
+                  "Error tidak diketahui"
+                );
               }
             };
 
             return (
               <SafeAreaView style={styles.container}>
-                <Text style={styles.title}>Aplikasi Printer Bluetooth</Text>
-                <TouchableOpacity style={styles.button} onPress={handlePrint}>
-                  <Text style={styles.buttonText}>Cetak Struk Tes</Text>
+                <Text style={styles.title}>
+                  Aplikasi Printer Bluetooth
+                </Text>
+                <TouchableOpacity
+                  style={styles.button}
+                  onPress={handlePrint}
+                >
+                  <Text style={styles.buttonText}>
+                    Cetak Struk Tes
+                  </Text>
                 </TouchableOpacity>
               </SafeAreaView>
             );
           };
 
           const styles = StyleSheet.create({
-            container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5FCFF' },
-            title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
-            button: { backgroundColor: '#0284c7', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
-            buttonText: { color: '#ffffff', fontWeight: 'bold' }
+            container: {
+              flex: 1,
+              justifyContent: 'center',
+              alignItems: 'center',
+              backgroundColor: '#F5FCFF',
+            },
+            title: {
+              fontSize: 20,
+              fontWeight: 'bold',
+              marginBottom: 20,
+            },
+            button: {
+              backgroundColor: '#0284c7',
+              paddingHorizontal: 20,
+              paddingVertical: 12,
+              borderRadius: 8,
+            },
+            buttonText: {
+              color: '#ffffff',
+              fontWeight: 'bold',
+            },
           });
 
           export default App;
           EOF
 
+
+      # ==============================
+      # 7. Build File APK Debug
+      # ==============================
       - name: Build Android APK
         run: |
           cd AplikasiPrinter/android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --stacktrace
 
+
+      # ==============================
+      # 8. Upload File APK Sebagai Artifact
+      # ==============================
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug.apk
-          path: AplikasiPrinter/android/app/build/outputs/apk/debug/app-debug.apk
+          name: AplikasiPrinter-debug
+          path: |
+            AplikasiPrinter/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
