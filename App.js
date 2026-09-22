@@ -12,10 +12,10 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  NativeModules,
 } from 'react-native';
 import DocumentPicker from 'react-native-document-picker';
 import Pdf from 'react-native-pdf';
-import { NativeModules } from 'react-native';
 
 const { CustomPrinter } = NativeModules;
 
@@ -25,9 +25,9 @@ export default function App() {
   const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Settings sesuai UI Gambar
+  // Settings
   const [rotation, setRotation] = useState(0); // 0, 90, 180, 270
-  const [paperWidth, setPaperWidth] = useState('58'); // Default 58mm atau 80mm
+  const [paperWidth, setPaperWidth] = useState('58'); // 58mm atau 80mm
   const [copies, setCopies] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
@@ -60,8 +60,10 @@ export default function App() {
     try {
       const res = await DocumentPicker.pickSingle({
         type: [DocumentPicker.types.pdf],
+        copyTo: 'cachesDirectory', // Menyalin ke cache internal agar URI aman diakses oleh native module
       });
-      setPdfUri(res.uri);
+      const validUri = res.fileCopyUri || res.uri;
+      setPdfUri(validUri);
       setFileName(res.name);
     } catch (err) {
       if (!DocumentPicker.isCancel(err)) {
@@ -138,6 +140,7 @@ export default function App() {
           {pdfUri ? (
             <View style={styles.pdfContainer}>
               <Pdf
+                trustAllCerts={false}
                 source={{ uri: pdfUri, cache: true }}
                 style={[styles.pdfView, { transform: [{ rotate: `${rotation}deg` }] }]}
                 onLoadComplete={(numberOfPages) => {
