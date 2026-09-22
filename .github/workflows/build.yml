@@ -22,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Create package.json if missing
         run: |
@@ -49,7 +49,8 @@ jobs:
       - name: Generate Android Folder
         run: |
           if [ ! -d "android" ]; then
-            npx react-native@0.72.6 init TempApp --skip-install
+            yarn config set ignore-engines true
+            npx --yes react-native@0.72.6 init TempApp --skip-install
             cp -r TempApp/android ./android
             rm -rf TempApp
           fi
@@ -407,4 +408,3 @@ jobs:
         with:
           name: app-release
           path: android/app/build/outputs/apk/release/app-release.apk
-
