@@ -5,50 +5,93 @@ import {
   View,
   TouchableOpacity,
   TextInput,
+  ScrollView,
   Alert,
-  SafeAreaView,
-  StatusBar,
+  NativeModules,
+  ActivityIndicator,
   PermissionsAndroid,
   Platform,
-  ActivityIndicator,
-  ScrollView,
-  NativeModules,
 } from 'react-native';
 import DocumentPicker from 'react-native-document-picker';
 import Pdf from 'react-native-pdf';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { CustomPrinter } = NativeModules;
 
 export default function App() {
-  const [macAddress, setMacAddress] = useState('');
   const [pdfUri, setPdfUri] = useState(null);
-  const [fileName, setFileName] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  // Settings
-  const [rotation, setRotation] = useState(0); // 0, 90, 180, 270
-  const [paperWidth, setPaperWidth] = useState('58'); // 58mm atau 80mm
-  const [copies, setCopies] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [rotation, setRotation] = useState(0); // 0, 90, 180, 270
+  
+  // Custom Paper Size (Width & Height)
+  const [paperWidth, setPaperWidth] = useState('80');
+  const [paperHeight, setPaperHeight] = useState('100');
+  
+  // Connection & Printers
+  const [macAddress, setMacAddress] = useState('');
+  const [copies, setCopies] = useState(1);
+  const [isScanning, setIsScanning] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('Belum Terhubung');
 
+  // Load Saved Preferences on Mount
   useEffect(() => {
-    requestBluetoothPermissions();
+    loadSavedSettings();
+    requestPermissionsAndScan();
   }, []);
 
-  const requestBluetoothPermissions = async () => {
+  const loadSavedSettings = async () => {
+    try {
+      const savedMac = await AsyncStorage.getItem('@printer_mac');
+      const savedWidth = await AsyncStorage.getItem('@paper_width');
+      const savedHeight = await AsyncStorage.getItem('@paper_height');
+
+      if (savedMac) setMacAddress(savedMac);
+      if (savedWidth) setPaperWidth(savedWidth);
+      if (savedHeight) setPaperHeight(savedHeight);
+    } catch (e) {
+      console.log('Gagal memuat pengaturan:', e);
+    }
+  };
+
+  const saveSettings = async (mac, width, height) => {
+    try {
+      if (mac) await AsyncStorage.setItem('@printer_mac', mac);
+      if (width) await AsyncStorage.setItem('@paper_width', width);
+      if (height) await AsyncStorage.setItem('@paper_height', height);
+    } catch (e) {
+      console.log('Gagal menyimpan pengaturan:', e);
+    }
+  };
+
+  const requestPermissionsAndScan = async () => {
     if (Platform.OS === 'android') {
       try {
         if (Platform.Version >= 31) {
-          await PermissionsAndroid.requestMultiple([
+          const granted = await PermissionsAndroid.requestMultiple([
             PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
             PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           ]);
+
+          if (
+            granted['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED &&
+            granted['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED
+          ) {
+            autoScanBluetooth();
+          } else {
+            setConnectionStatus('Izin Bluetooth ditolak');
+          }
         } else {
-          await PermissionsAndroid.request(
+          const granted = await PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
           );
+          if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+            autoScanBluetooth();
+          } else {
+            setConnectionStatus('Izin Lokasi/Bluetooth ditolak');
+          }
         }
       } catch (err) {
         console.warn(err);
@@ -56,19 +99,74 @@ export default function App() {
     }
   };
 
-  const pickDocument = async () => {
+  const autoScanBluetooth = async () => {
+    setIsScanning(true);
+    setConnectionStatus('Memindai Perangkat Bluetooth...');
+
     try {
-      const res = await DocumentPicker.pickSingle({
+      // Panggil modul native jika ada untuk mendapatkan paired devices
+      if (CustomPrinter && CustomPrinter.getPairedDevices) {
+        const devices = await CustomPrinter.getPairedDevices();
+        if (devices && devices.length > 0) {
+          // Gunakan MAC address tersimpan atau perangkat pertama
+          const savedMac = await AsyncStorage.getItem('@printer_mac');
+          const targetDevice = devices.find(d => d.address === savedMac) || devices[0];
+          
+          setMacAddress(targetDevice.address);
+          setConnectionStatus(`Terhubung: ${targetDevice.name || targetDevice.address}`);
+          await saveSettings(targetDevice.address, paperWidth, paperHeight);
+        } else {
+          setConnectionStatus('Tidak ada printer terpasang (Paired)');
+        }
+      } else {
+        // Fallback jika menggunakan MAC Address yang sudah ada di memori
+        const savedMac = await AsyncStorage.getItem('@printer_mac');
+        if (savedMac) {
+          setMacAddress(savedMac);
+          setConnectionStatus(`Gunakan MAC Tersimpan: ${savedMac}`);
+        } else {
+          setConnectionStatus('Masukkan MAC Address / Scan Printer');
+        }
+      }
+    } catch (error) {
+      setConnectionStatus('Gagal memindai. Periksa Bluetooth Anda');
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const res = await DocumentPicker.pick({
         type: [DocumentPicker.types.pdf],
-        copyTo: 'cachesDirectory', // Menyalin ke cache internal agar URI aman diakses oleh native module
       });
-      const validUri = res.fileCopyUri || res.uri;
-      setPdfUri(validUri);
-      setFileName(res.name);
+      if (res && res[0]) {
+        setPdfUri(res[0].uri);
+      }
     } catch (err) {
       if (!DocumentPicker.isCancel(err)) {
-        Alert.alert('Gagal', 'Gagal mengambil file PDF.');
+        Alert.alert('Error', 'Gagal memilih dokumen PDF.');
       }
+    }
+  };
+
+  const handleWidthChange = (val) => {
+    setPaperWidth(val);
+    saveSettings(macAddress, val, paperHeight);
+  };
+
+  const handleHeightChange = (val) => {
+    setPaperHeight(val);
+    saveSettings(macAddress, paperWidth, val);
+  };
+
+  const handleMacChange = (val) => {
+    setMacAddress(val);
+    saveSettings(val, paperWidth, paperHeight);
+    if (val.trim() !== '') {
+      setConnectionStatus(`Alamat Printer: ${val}`);
+    } else {
+      setConnectionStatus('Belum Terhubung');
     }
   };
 
@@ -77,335 +175,453 @@ export default function App() {
       Alert.alert('Peringatan', 'Silakan pilih file PDF resi terlebih dahulu.');
       return;
     }
+
     if (!macAddress) {
-      Alert.alert('Peringatan', 'Silakan masukkan MAC Address printer Bluetooth Anda.');
+      Alert.alert('Peringatan', 'Alamat MAC Printer Bluetooth belum diisi/ditemukan.');
       return;
     }
 
-    setLoading(true);
+    setIsPrinting(true);
+    setConnectionStatus('Mengirim Perintah Cetak...');
+
     try {
-      await requestBluetoothPermissions();
-      const targetWidth = parseInt(paperWidth, 10) || 58;
-      const numCopies = parseInt(copies, 10) || 1;
+      const widthMm = parseInt(paperWidth, 10) || 80;
+      const heightMm = parseInt(paperHeight, 10) || 100;
 
-      const message = await CustomPrinter.printPdfWithOptions(
+      const result = await CustomPrinter.printPdfWithOptions(
         pdfUri,
-        macAddress.trim(),
-        targetWidth,
+        macAddress,
+        widthMm,
         rotation,
-        numCopies
+        copies,
       );
-      setLoading(false);
-      Alert.alert('✅ Berhasil', message || 'Resi berhasil terkirim ke printer!');
+
+      setConnectionStatus('Berhasil Dicetak! ✅');
+      Alert.alert('Sukses', result || 'Resi berhasil dicetak.');
     } catch (error) {
-      setLoading(false);
-      let errorMsg = error.message || 'Terjadi kesalahan sistem.';
-
-      if (errorMsg.includes('permission') || errorMsg.includes('BLUETOOTH_CONNECT')) {
-        errorMsg = 'Izin Bluetooth ditolak. Silakan izinkan akses Bluetooth di Pengaturan HP Anda.';
-      } else if (
-        errorMsg.includes('read failed') ||
-        errorMsg.includes('socket closed') ||
-        errorMsg.includes('PRINT_ERROR')
-      ) {
-        errorMsg =
-          'Gagal terhubung ke Bluetooth! Pastikan:\n1. Printer dalam keadaan menyala.\n2. MAC Address sesuai.\n3. Printer sudah ter-pairing di HP.';
-      }
-
-      Alert.alert('❌ Gagal Terhubung / Cetak', errorMsg);
+      setConnectionStatus('Cetak Gagal ❌');
+      Alert.alert('Gagal Cetak', error.message || 'Terjadi kesalahan saat mencetak.');
+    } finally {
+      setIsPrinting(false);
     }
   };
 
-  const calculateInch = (mm) => {
-    const val = parseFloat(mm);
-    if (isNaN(val)) return '0 inch';
-    return `${(val / 25.4).toFixed(1)}(inch)`;
-  };
-
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0284c7" />
-
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 30 }}>
       {/* Header Bar */}
-      <View style={styles.header}>
+      <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>Preview Resi PDF</Text>
-        <TouchableOpacity style={styles.btnSelectFile} onPress={pickDocument}>
-          <Text style={styles.btnSelectFileText}>📂 Pilih PDF</Text>
+        <TouchableOpacity style={styles.btnPick} onPress={handlePickDocument}>
+          <Text style={styles.btnPickText}>📁 Pilih PDF</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* PDF Preview Container */}
-        <View style={styles.previewCard}>
-          {pdfUri ? (
-            <View style={styles.pdfContainer}>
-              <Pdf
-                trustAllCerts={false}
-                source={{ uri: pdfUri, cache: true }}
-                style={[styles.pdfView, { transform: [{ rotate: `${rotation}deg` }] }]}
-                onLoadComplete={(numberOfPages) => {
-                  setTotalPages(numberOfPages);
-                  setCurrentPage(1);
-                }}
-                onPageChanged={(page) => {
-                  setCurrentPage(page);
-                }}
-                onError={(error) => {
-                  Alert.alert('Error PDF', 'Gagal memuat preview PDF.');
-                }}
-              />
-            </View>
-          ) : (
-            <View style={styles.emptyPreview}>
-              <Text style={styles.emptyText}>Belum ada file PDF terpilih</Text>
-              <Text style={styles.emptySubText}>Klik "Pilih PDF" di pojok kanan atas</Text>
-            </View>
-          )}
-
-          {/* Page Pagination Indicator */}
-          {pdfUri && (
-            <View style={styles.pageIndicator}>
-              <Text style={styles.pageText}>
-                {currentPage} / {totalPages}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Print Direction (Rotation) */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Print direction</Text>
-          <View style={styles.rotationRow}>
-            {[0, 90, 180, 270].map((deg) => (
-              <TouchableOpacity
-                key={deg}
-                style={[styles.btnRot, rotation === deg && styles.btnRotActive]}
-                onPress={() => setRotation(deg)}
-              >
-                <Text style={[styles.btnRotText, rotation === deg && styles.btnRotTextActive]}>
-                  {deg}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Paper Width (Custom Size) */}
-        <View style={styles.section}>
-          <View style={styles.widthRow}>
-            <Text style={styles.sectionLabel}>Width:</Text>
-            <TextInput
-              style={styles.widthInput}
-              keyboardType="numeric"
-              value={paperWidth}
-              onChangeText={setPaperWidth}
+      {/* PDF Preview */}
+      <View style={styles.pdfContainer}>
+        {pdfUri ? (
+          <>
+            <Pdf
+              source={{ uri: pdfUri, cache: true }}
+              style={[styles.pdf, { transform: [{ rotate: `${rotation}deg` }] }]}
+              onLoadComplete={(numberOfPages) => setTotalPages(numberOfPages)}
+              onPageChanged={(page) => setCurrentPage(page)}
+              onError={(error) => console.log('PDF Error:', error)}
             />
-            <Text style={styles.unitText}>mm</Text>
-            <Text style={styles.inchText}>{calculateInch(paperWidth)}</Text>
+            <View style={styles.pageBadge}>
+              <Text style={styles.pageBadgeText}>{`${currentPage} / ${totalPages}`}</Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.emptyPdf}>
+            <Text style={styles.emptyPdfText}>Belum ada file PDF yang dipilih</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Print Direction (Rotation) */}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Print direction</Text>
+        <View style={styles.rowBtnGroup}>
+          {[0, 90, 180, 270].map((degree) => (
+            <TouchableOpacity
+              key={degree}
+              style={[
+                styles.btnDegree,
+                rotation === degree && styles.btnDegreeActive,
+              ]}
+              onPress={() => setRotation(degree)}
+            >
+              <Text
+                style={[
+                  styles.btnDegreeText,
+                  rotation === degree && styles.btnDegreeTextActive,
+                ]}
+              >
+                {degree}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Custom Paper Size (Width & Height) */}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Paper Size Options</Text>
+        <View style={styles.rowTwoInputs}>
+          <View style={styles.inputBoxHalf}>
+            <Text style={styles.inputSubLabel}>Width (Lebar):</Text>
+            <View style={styles.inputWithUnit}>
+              <TextInput
+                style={styles.textInputFlex}
+                keyboardType="numeric"
+                value={paperWidth}
+                onChangeText={handleWidthChange}
+                placeholder="80"
+              />
+              <Text style={styles.unitText}>mm</Text>
+            </View>
+          </View>
+
+          <View style={styles.inputBoxHalf}>
+            <Text style={styles.inputSubLabel}>Height (Tinggi):</Text>
+            <View style={styles.inputWithUnit}>
+              <TextInput
+                style={styles.textInputFlex}
+                keyboardType="numeric"
+                value={paperHeight}
+                onChangeText={handleHeightChange}
+                placeholder="100"
+              />
+              <Text style={styles.unitText}>mm</Text>
+            </View>
           </View>
         </View>
+      </View>
 
-        {/* Print Options Title Bar */}
-        <View style={styles.optionsHeader}>
-          <Text style={styles.optionsHeaderText}>Print options</Text>
+      {/* Print Options & Bluetooth Status */}
+      <View style={styles.sectionHeaderBlue}>
+        <Text style={styles.sectionHeaderBlueText}>Print options & Connection</Text>
+      </View>
+
+      <View style={styles.section}>
+        {/* Connection Status Banner */}
+        <View style={styles.statusBanner}>
+          <Text style={styles.statusBannerLabel}>Connection status:</Text>
+          <Text style={styles.statusBannerValue}>{connectionStatus}</Text>
         </View>
 
-        {/* Connection Status & MAC Address */}
-        <View style={styles.rowItem}>
-          <Text style={styles.rowLabel}>Connection status</Text>
+        {/* Bluetooth MAC Address Input & Auto Scan */}
+        <View style={styles.macRow}>
           <TextInput
             style={styles.macInput}
             placeholder="MAC Address (00:11:22:...)"
-            placeholderTextColor="#94a3b8"
             value={macAddress}
-            onChangeText={setMacAddress}
-            autoCapitalize="characters"
+            onChangeText={handleMacChange}
           />
+          <TouchableOpacity
+            style={styles.btnScan}
+            onPress={autoScanBluetooth}
+            disabled={isScanning}
+          >
+            {isScanning ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.btnScanText}>Scan BT</Text>
+            )}
+          </TouchableOpacity>
         </View>
 
-        {/* Number of prints */}
-        <View style={styles.rowItem}>
-          <Text style={styles.rowLabel}>Number of prints</Text>
-          <View style={styles.counterRow}>
+        {/* Copies Counter */}
+        <View style={styles.copiesRow}>
+          <Text style={styles.copiesLabel}>Number of prints</Text>
+          <View style={styles.counterGroup}>
             <TouchableOpacity
               style={styles.btnCounter}
-              onPress={() => setCopies(Math.max(1, copies - 1))}
+              onPress={() => setCopies((prev) => Math.max(1, prev - 1))}
             >
-              <Text style={styles.counterText}>-</Text>
+              <Text style={styles.btnCounterText}>-</Text>
             </TouchableOpacity>
-            <Text style={styles.copiesVal}>{copies}</Text>
+
+            <Text style={styles.counterValue}>{copies}</Text>
+
             <TouchableOpacity
               style={styles.btnCounter}
-              onPress={() => setCopies(copies + 1)}
+              onPress={() => setCopies((prev) => prev + 1)}
             >
-              <Text style={styles.counterText}>+</Text>
+              <Text style={styles.btnCounterText}>+</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Action Buttons (CANCEL / OK) */}
+        {/* Action Buttons */}
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={styles.btnCancel}
             onPress={() => {
               setPdfUri(null);
-              setFileName('');
+              setCopies(1);
             }}
           >
             <Text style={styles.btnCancelText}>CANCEL</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.btnOk, loading && styles.btnDisabled]}
+            style={[styles.btnPrint, isPrinting && { backgroundColor: '#80c4e8' }]}
             onPress={handlePrint}
-            disabled={loading}
+            disabled={isPrinting}
           >
-            {loading ? (
-              <ActivityIndicator color="#ffffff" />
+            {isPrinting ? (
+              <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={styles.btnOkText}>OK (PRINT)</Text>
+              <Text style={styles.btnPrintText}>OK (PRINT)</Text>
             )}
           </TouchableOpacity>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f1f5f9' },
-  header: {
-    height: 56,
-    backgroundColor: '#0284c7',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+  container: {
+    flex: 1,
+    backgroundColor: '#f4f6f9',
   },
-  headerTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
-  btnSelectFile: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  headerBar: {
+    backgroundColor: '#0088cc',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  btnPick: {
+    backgroundColor: '#f39c12',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
   },
-  btnSelectFileText: { color: '#ffffff', fontWeight: '600', fontSize: 13 },
-  scrollContent: { paddingBottom: 30 },
-  previewCard: {
-    height: 280,
-    backgroundColor: '#e2e8f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    marginVertical: 10,
+  btnPickText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 13,
   },
-  pdfContainer: { width: '85%', height: '90%', backgroundColor: '#fff' },
-  pdfView: { flex: 1, width: '100%', height: '100%' },
-  emptyPreview: { alignItems: 'center', justifyContent: 'center' },
-  emptyText: { color: '#64748b', fontSize: 16, fontWeight: 'bold' },
-  emptySubText: { color: '#94a3b8', fontSize: 12, marginTop: 4 },
-  pageIndicator: {
+  pdfContainer: {
+    height: 280,
+    backgroundColor: '#e9ecef',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 10,
+    position: 'relative',
+  },
+  pdf: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'transparent',
+  },
+  emptyPdf: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyPdfText: {
+    color: '#6c757d',
+    fontSize: 14,
+  },
+  pageBadge: {
     position: 'absolute',
-    bottom: 8,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 12,
+    bottom: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 14,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  pageText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  section: { backgroundColor: '#ffffff', padding: 14, marginBottom: 8 },
-  sectionLabel: { color: '#334155', fontSize: 14, marginBottom: 8, fontWeight: '500' },
-  rotationRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  btnRot: {
+  pageBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  section: {
+    paddingHorizontal: 16,
+    marginVertical: 8,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  rowBtnGroup: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  btnDegree: {
     flex: 1,
     backgroundColor: '#e2e8f0',
     paddingVertical: 10,
-    marginHorizontal: 4,
-    borderRadius: 4,
+    marginHorizontal: 3,
+    borderRadius: 6,
     alignItems: 'center',
   },
-  btnRotActive: { backgroundColor: '#0284c7' },
-  btnRotText: { color: '#334155', fontWeight: 'bold' },
-  btnRotTextActive: { color: '#ffffff' },
-  widthRow: { flexDirection: 'row', alignItems: 'center' },
-  widthInput: {
-    borderWidth: 1,
-    borderColor: '#0284c7',
-    width: 70,
-    height: 38,
-    textAlign: 'center',
-    fontSize: 16,
-    marginHorizontal: 8,
-    borderRadius: 4,
-    color: '#0f172a',
+  btnDegreeActive: {
+    backgroundColor: '#0088cc',
   },
-  unitText: { fontSize: 14, color: '#334155', marginRight: 16 },
-  inchText: { fontSize: 14, color: '#64748b' },
-  optionsHeader: {
-    backgroundColor: '#0284c7',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginTop: 8,
+  btnDegreeText: {
+    color: '#333',
+    fontWeight: 'bold',
   },
-  optionsHeaderText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
-  rowItem: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  btnDegreeTextActive: {
+    color: '#fff',
+  },
+  rowTwoInputs: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  inputBoxHalf: {
+    width: '48%',
+  },
+  inputSubLabel: {
+    fontSize: 12,
+    color: '#555',
+    marginBottom: 4,
+  },
+  inputWithUnit: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  rowLabel: { color: '#334155', fontSize: 14, flex: 1 },
-  macInput: {
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: '#0088cc',
     borderRadius: 6,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    width: 170,
-    fontSize: 13,
-    color: '#0f172a',
-    textAlign: 'right',
+    backgroundColor: '#fff',
+    height: 42,
   },
-  counterRow: { flexDirection: 'row', alignItems: 'center' },
+  textInputFlex: {
+    flex: 1,
+    fontSize: 15,
+    color: '#000',
+    padding: 0,
+  },
+  unitText: {
+    fontSize: 13,
+    color: '#777',
+  },
+  sectionHeaderBlue: {
+    backgroundColor: '#0088cc',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 10,
+  },
+  sectionHeaderBlueText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  statusBanner: {
+    marginBottom: 10,
+    marginTop: 6,
+  },
+  statusBannerLabel: {
+    fontSize: 13,
+    color: '#555',
+  },
+  statusBannerValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#0088cc',
+    marginTop: 2,
+  },
+  macRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  macInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#fff',
+    height: 42,
+    marginRight: 8,
+  },
+  btnScan: {
+    backgroundColor: '#27ae60',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 6,
+  },
+  btnScanText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  copiesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 12,
+  },
+  copiesLabel: {
+    fontSize: 14,
+    color: '#333',
+  },
+  counterGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   btnCounter: {
-    backgroundColor: '#0284c7',
+    backgroundColor: '#0088cc',
     width: 36,
     height: 36,
-    borderRadius: 4,
-    alignItems: 'center',
+    borderRadius: 6,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  counterText: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-  copiesVal: { marginHorizontal: 16, fontSize: 16, fontWeight: 'bold', color: '#0f172a' },
+  btnCounterText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  counterValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginHorizontal: 16,
+    color: '#000',
+  },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 16,
-    marginTop: 10,
+    marginTop: 16,
   },
   btnCancel: {
-    backgroundColor: '#ffffff',
+    flex: 1,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 6,
+    borderColor: '#ccc',
+    backgroundColor: '#fff',
+    paddingVertical: 12,
     marginRight: 8,
-    alignItems: 'center',
-  },
-  btnCancelText: { color: '#334155', fontWeight: 'bold' },
-  btnOk: {
-    backgroundColor: '#0284c7',
-    flex: 1,
-    paddingVertical: 14,
     borderRadius: 6,
-    marginLeft: 8,
     alignItems: 'center',
   },
-  btnDisabled: { backgroundColor: '#93c5fd' },
-  btnOkText: { color: '#ffffff', fontWeight: 'bold' },
+  btnCancelText: {
+    color: '#555',
+    fontWeight: 'bold',
+  },
+  btnPrint: {
+    flex: 1,
+    backgroundColor: '#0088cc',
+    paddingVertical: 12,
+    marginLeft: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  btnPrintText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
 });
