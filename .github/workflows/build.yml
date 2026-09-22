@@ -29,7 +29,7 @@ jobs:
         run: |
           echo "🚀 Inisialisasi React Native Project..."
 
-          # Install paket dengan versi terkunci yang kompatibel dengan React Native 0.72.6
+          # Install paket dengan react-native-blob-util untuk fix permission PDF
           npm install react-native-document-picker@^9.0.1 react-native-pdf@6.7.4 react-native-blob-util@0.19.11 @react-native-async-storage/async-storage@^1.21.0 --save --legacy-peer-deps
 
           # Generate project React Native
@@ -83,7 +83,7 @@ jobs:
 
           mkdir -p android/app/src/main/java/com/aplikasiprinter
 
-          # CustomPrinterModule.java (Sudah ditambah getPairedDevices untuk Auto Scan)
+          # CustomPrinterModule.java
           cat > android/app/src/main/java/com/aplikasiprinter/CustomPrinterModule.java <<'EOF'
           package com.aplikasiprinter;
 
