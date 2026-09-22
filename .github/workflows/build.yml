@@ -26,24 +26,19 @@ jobs:
 
       - name: Initialize React Native App
         run: |
-          # Paksa Git & NPM menggunakan HTTPS penuh untuk SSH / Git Protocol
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
-          git config --global url."https://".insteadOf "git://"
-
           npx react-native@0.72.6 init AplikasiPrinter --version 0.72.6 --skip-install
           cd AplikasiPrinter
           
           npm install --legacy-peer-deps
           
-          # Install via tarball release/https direct
-          npm install github:tiasho/react-native-bluetooth-escpos-printer --save --legacy-peer-deps
+          # Install library printer resmi dari registry NPM (bukan dari GitHub tiasho yang mati)
+          npm install tp-react-native-bluetooth-escpos-printer --save --legacy-peer-deps
           
           # Buat file App.tsx dengan kode printer
           cat << 'EOF' > App.tsx
           import React from 'react';
           import { SafeAreaView, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
-          import { BluetoothEscposPrinter } from 'react-native-bluetooth-escpos-printer';
+          import { BluetoothEscposPrinter } from 'tp-react-native-bluetooth-escpos-printer';
 
           const App = () => {
             const handlePrint = async () => {
@@ -57,8 +52,8 @@ jobs:
                 });
                 await BluetoothEscposPrinter.printText("--------------------------------\n\r", {});
                 await BluetoothEscposPrinter.printText("Berhasil Terhubung!\n\r\n\r", {});
-              } catch (error) {
-                Alert.alert("Gagal Cetak", error.toString());
+              } catch (error: any) {
+                Alert.alert("Gagal Cetak", error?.toString() || "Error tidak diketahui");
               }
             };
 
