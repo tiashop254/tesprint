@@ -53,12 +53,12 @@ jobs:
 
 
       # ==============================
-      # 5. Install Library Printer Bluetooth
+      # 5. Install Library Printer Bluetooth (NPM Resmi)
       # ==============================
       - name: Install Bluetooth Printer
         run: |
           cd AplikasiPrinter
-          npm install tp-react-native-bluetooth-escpos-printer \
+          npm install react-native-bluetooth-escpos-printer-plus \
             --save \
             --legacy-peer-deps
 
@@ -81,7 +81,7 @@ jobs:
           } from 'react-native';
           import {
             BluetoothEscposPrinter,
-          } from 'tp-react-native-bluetooth-escpos-printer';
+          } from 'react-native-bluetooth-escpos-printer-plus';
 
           const App = () => {
             const handlePrint = async () => {
