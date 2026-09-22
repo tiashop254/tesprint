@@ -11,8 +11,8 @@ cd AplikasiPrinter
 echo "=== 2. Menginstal Dependensi Utama ==="
 npm install --legacy-peer-deps
 
-echo "=== 3. Menginstal Library Printer Bluetooth ==="
-npm install tp-react-native-bluetooth-escpos-printer --save --legacy-peer-deps
+echo "=== 3. Menginstal Library Printer Bluetooth (NPM Resmi) ==="
+npm install react-native-bluetooth-escpos-printer-plus --save --legacy-peer-deps
 
 echo "=== 4. Menyiapkan File App.tsx ==="
 cat > App.tsx <<'EOF'
@@ -26,7 +26,7 @@ import {
 } from 'react-native';
 import {
   BluetoothEscposPrinter,
-} from 'tp-react-native-bluetooth-escpos-printer';
+} from 'react-native-bluetooth-escpos-printer-plus';
 
 const App = () => {
   const handlePrint = async () => {
