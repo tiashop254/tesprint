@@ -1,192 +1,399 @@
-name: Build Android APK
+name: Auto Setup & Build APK (Thermal Printer)
 
 on:
   push:
     branches:
       - main
-
   workflow_dispatch:
 
 jobs:
-  build:
+  setup-and-build:
     runs-on: ubuntu-latest
 
     steps:
-
       # ==============================
       # 1. Checkout Repository
       # ==============================
       - name: Checkout repository
         uses: actions/checkout@v4
 
-
       # ==============================
-      # 2. Setup Node.js (v18)
+      # 2. Setup Node.js & Java
       # ==============================
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
-
-      # ==============================
-      # 3. Setup JDK 17
-      # ==============================
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: zulu
           java-version: '17'
 
-
       # ==============================
-      # 4. Inisialisasi Project React Native
+      # 3. Otomatis Buat File & UI
       # ==============================
-      - name: Initialize React Native App
+      - name: Auto Generate Project Files
         run: |
-          npx react-native@0.72.6 init AplikasiPrinter \
-            --version 0.72.6 \
-            --skip-install
+          echo "🚀 Membuat project React Native, UI, dan Native Java..."
 
+          # Inisialisasi React Native
+          npx react-native@0.72.6 init AplikasiPrinter --version 0.72.6 --skip-install
           cd AplikasiPrinter
-          npm install --legacy-peer-deps
+          npm install react-native-document-picker --save --legacy-peer-deps
 
-
-      # ==============================
-      # 5. Install Library Printer Bluetooth (NPM Resmi)
-      # ==============================
-      - name: Install Bluetooth Printer
-        run: |
-          cd AplikasiPrinter
-          npm install react-native-bluetooth-escpos-printer-plus \
-            --save \
-            --legacy-peer-deps
-
-
-      # ==============================
-      # 6. Buat File App.tsx
-      # ==============================
-      - name: Create Printer App
-        run: |
-          cd AplikasiPrinter
-
-          cat > App.tsx <<'EOF'
-          import React from 'react';
+          # Buat File App.js (Tampilan Aplikasi)
+          cat > App.js <<'EOF'
+          import React, { useState } from 'react';
           import {
-            SafeAreaView,
             StyleSheet,
             Text,
+            View,
             TouchableOpacity,
+            TextInput,
             Alert,
+            SafeAreaView,
+            StatusBar,
           } from 'react-native';
-          import {
-            BluetoothEscposPrinter,
-          } from 'react-native-bluetooth-escpos-printer-plus';
+          import DocumentPicker from 'react-native-document-picker';
+          import { NativeModules } from 'react-native';
 
-          const App = () => {
-            const handlePrint = async () => {
+          const { CustomPrinter } = NativeModules;
+
+          export default function App() {
+            const [macAddress, setMacAddress] = useState('00:11:22:33:44:55');
+            const [pdfUri, setPdfUri] = useState(null);
+            const [fileName, setFileName] = useState('');
+
+            const pickDocument = async () => {
               try {
-                await BluetoothEscposPrinter.printerAlign(
-                  BluetoothEscposPrinter.ALIGN.CENTER
-                );
+                const res = await DocumentPicker.pickSingle({
+                  type: [DocumentPicker.types.pdf],
+                });
+                setPdfUri(res.uri);
+                setFileName(res.name);
+              } catch (err) {
+                if (!DocumentPicker.isCancel(err)) {
+                  Alert.alert('Error', 'Gagal memilih file PDF');
+                }
+              }
+            };
 
-                await BluetoothEscposPrinter.printText(
-                  "TES CETAK PRINTER\n\r",
-                  {
-                    encoding: 'GBK',
-                    codepage: 0,
-                    widthtimes: 1,
-                    heigthtimes: 1,
-                  }
-                );
+            const handlePrint = async () => {
+              if (!pdfUri) {
+                Alert.alert('Peringatan', 'Pilih file PDF resi terlebih dahulu!');
+                return;
+              }
+              if (!macAddress) {
+                Alert.alert('Peringatan', 'Masukkan MAC Address Bluetooth Printer!');
+                return;
+              }
 
-                await BluetoothEscposPrinter.printText(
-                  "--------------------------------\n\r",
-                  {}
-                );
-
-                await BluetoothEscposPrinter.printText(
-                  "Berhasil Terhubung!\n\r\n\r",
-                  {}
-                );
-
-                Alert.alert(
-                  "Berhasil",
-                  "Perintah cetak sudah dikirim."
-                );
-              } catch (error: any) {
-                Alert.alert(
-                  "Gagal Cetak",
-                  error?.toString() ||
-                  "Error tidak diketahui"
-                );
+              try {
+                const message = await CustomPrinter.printPdfUri(pdfUri, macAddress);
+                Alert.alert('Sukses', message);
+              } catch (error) {
+                Alert.alert('Gagal Cetak', error.message || 'Terjadi kesalahan');
               }
             };
 
             return (
               <SafeAreaView style={styles.container}>
-                <Text style={styles.title}>
-                  Aplikasi Printer Bluetooth
-                </Text>
-                <TouchableOpacity
-                  style={styles.button}
-                  onPress={handlePrint}
-                >
-                  <Text style={styles.buttonText}>
-                    Cetak Struk Tes
-                  </Text>
-                </TouchableOpacity>
+                <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
+                <View style={styles.content}>
+                  <Text style={styles.title}>Cetak Resi PDF Thermal</Text>
+                  <Text style={styles.subtitle}>Aplikasi Cetak Bluetooth 58mm</Text>
+
+                  <View style={styles.card}>
+                    <Text style={styles.label}>MAC Address Printer Bluetooth:</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="00:11:22:33:44:55"
+                      placeholderTextColor="#94a3b8"
+                      value={macAddress}
+                      onChangeText={setMacAddress}
+                    />
+
+                    <TouchableOpacity style={styles.btnPick} onPress={pickDocument}>
+                      <Text style={styles.btnPickText}>
+                        {fileName ? `📄 ${fileName}` : '📂 Pilih File PDF Resi'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.btnPrint} onPress={handlePrint}>
+                      <Text style={styles.btnPrintText}>🖨️ Cetak Sekarang</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </SafeAreaView>
             );
-          };
+          }
 
           const styles = StyleSheet.create({
-            container: {
-              flex: 1,
-              justifyContent: 'center',
+            container: { flex: 1, backgroundColor: '#f8fafc' },
+            content: { flex: 1, padding: 24, justifyContent: 'center' },
+            title: { fontSize: 24, fontWeight: 'bold', color: '#0f172a', textAlign: 'center' },
+            subtitle: { fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 32 },
+            card: {
+              backgroundColor: '#ffffff',
+              padding: 20,
+              borderRadius: 16,
+              elevation: 3,
+            },
+            label: { fontSize: 14, fontWeight: '600', color: '#334155', marginBottom: 8 },
+            input: {
+              borderWidth: 1,
+              borderColor: '#cbd5e1',
+              borderRadius: 10,
+              padding: 12,
+              fontSize: 15,
+              color: '#0f172a',
+              marginBottom: 16,
+            },
+            btnPick: {
+              backgroundColor: '#e2e8f0',
+              padding: 14,
+              borderRadius: 10,
               alignItems: 'center',
-              backgroundColor: '#F5FCFF',
+              marginBottom: 16,
             },
-            title: {
-              fontSize: 20,
-              fontWeight: 'bold',
-              marginBottom: 20,
+            btnPickText: { color: '#334155', fontWeight: '600', fontSize: 14 },
+            btnPrint: {
+              backgroundColor: '#2563eb',
+              padding: 16,
+              borderRadius: 10,
+              alignItems: 'center',
             },
-            button: {
-              backgroundColor: '#0284c7',
-              paddingHorizontal: 20,
-              paddingVertical: 12,
-              borderRadius: 8,
-            },
-            buttonText: {
-              color: '#ffffff',
-              fontWeight: 'bold',
-            },
+            btnPrintText: { color: '#ffffff', fontWeight: 'bold', fontSize: 16 },
           });
-
-          export default App;
           EOF
 
+          # Buat Folder Native Java
+          mkdir -p android/app/src/main/java/com/aplikasiprinter
+
+          # CustomPrinterModule.java
+          cat > android/app/src/main/java/com/aplikasiprinter/CustomPrinterModule.java <<'EOF'
+          package com.aplikasiprinter;
+
+          import android.bluetooth.BluetoothAdapter;
+          import android.bluetooth.BluetoothDevice;
+          import android.bluetooth.BluetoothSocket;
+          import android.graphics.Bitmap;
+          import android.graphics.Color;
+          import android.graphics.pdf.PdfRenderer;
+          import android.net.Uri;
+          import android.os.ParcelFileDescriptor;
+          import com.facebook.react.bridge.Promise;
+          import com.facebook.react.bridge.ReactApplicationContext;
+          import com.facebook.react.bridge.ReactContextBaseJavaModule;
+          import com.facebook.react.bridge.ReactMethod;
+
+          import java.io.File;
+          import java.io.FileOutputStream;
+          import java.io.InputStream;
+          import java.io.OutputStream;
+          import java.util.UUID;
+
+          public class CustomPrinterModule extends ReactContextBaseJavaModule {
+              private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+
+              public CustomPrinterModule(ReactApplicationContext reactContext) {
+                  super(reactContext);
+              }
+
+              @Override
+              public String getName() {
+                  return "CustomPrinter";
+              }
+
+              @ReactMethod
+              public void printPdfUri(String uriString, String macAddress, Promise promise) {
+                  BluetoothSocket socket = null;
+                  try {
+                      Uri uri = Uri.parse(uriString);
+                      InputStream inputStream = getReactApplicationContext().getContentResolver().openInputStream(uri);
+                      File cacheFile = new File(getReactApplicationContext().getCacheDir(), "temp_print.pdf");
+                      FileOutputStream fos = new FileOutputStream(cacheFile);
+                      byte[] buffer = new byte[1024];
+                      int read;
+                      while ((read = inputStream.read(buffer)) != -1) {
+                          fos.write(buffer, 0, read);
+                      }
+                      fos.close();
+                      inputStream.close();
+
+                      ParcelFileDescriptor pfd = ParcelFileDescriptor.open(cacheFile, ParcelFileDescriptor.MODE_READ_ONLY);
+                      PdfRenderer renderer = new PdfRenderer(pfd);
+                      PdfRenderer.Page page = renderer.openPage(0);
+
+                      int width = 384;
+                      int height = (int) ((float) width / page.getWidth() * page.getHeight());
+
+                      Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                      page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                      page.close();
+                      renderer.close();
+                      pfd.close();
+
+                      BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+                      if (adapter == null) {
+                          promise.reject("NO_BT", "Bluetooth tidak aktif");
+                          return;
+                      }
+
+                      BluetoothDevice device = adapter.getRemoteDevice(macAddress);
+                      socket = device.createRfcommSocketToServiceRecord(SPP_UUID);
+                      adapter.cancelDiscovery();
+                      socket.connect();
+
+                      OutputStream os = socket.getOutputStream();
+                      os.write(new byte[]{0x1B, 0x40});
+
+                      byte[] printImageBytes = decodeBitmapToESCCommand(bitmap);
+                      os.write(printImageBytes);
+                      os.write(new byte[]{0x1D, 0x56, 0x41, 0x10});
+
+                      os.flush();
+                      socket.close();
+
+                      promise.resolve("Resi PDF Berhasil Dicetak!");
+                  } catch (Exception e) {
+                      if (socket != null) {
+                          try { socket.close(); } catch (Exception ignored) {}
+                      }
+                      promise.reject("PRINT_ERROR", e.getMessage());
+                  }
+              }
+
+              private byte[] decodeBitmapToESCCommand(Bitmap bmp) {
+                  int width = bmp.getWidth();
+                  int height = bmp.getHeight();
+                  int bwWidth = (width + 7) / 8;
+                  byte[] stream = new byte[(bwWidth + 8) * height + 8];
+
+                  int k = 0;
+                  stream[k++] = 0x1D;
+                  stream[k++] = 0x76;
+                  stream[k++] = 0x30;
+                  stream[k++] = 0x00;
+                  stream[k++] = (byte) (bwWidth % 256);
+                  stream[k++] = (byte) (bwWidth / 256);
+                  stream[k++] = (byte) (height % 256);
+                  stream[k++] = (byte) (height / 256);
+
+                  for (int i = 0; i < height; i++) {
+                      for (int j = 0; j < bwWidth; j++) {
+                          byte b = 0;
+                          for (int p = 0; p < 8; p++) {
+                              int posX = j * 8 + p;
+                              if (posX < width) {
+                                  int pixel = bmp.getPixel(posX, i);
+                                  int r = Color.red(pixel);
+                                  int g = Color.green(pixel);
+                                  int bVal = Color.blue(pixel);
+                                  if ((r + g + bVal) / 3 < 128) {
+                                      b |= (byte) (128 >> p);
+                                  }
+                              }
+                          }
+                          stream[k++] = b;
+                      }
+                  }
+                  return stream;
+              }
+          }
+          EOF
+
+          # CustomPrinterPackage.java
+          cat > android/app/src/main/java/com/aplikasiprinter/CustomPrinterPackage.java <<'EOF'
+          package com.aplikasiprinter;
+
+          import com.facebook.react.ReactPackage;
+          import com.facebook.react.bridge.NativeModule;
+          import com.facebook.react.bridge.ReactApplicationContext;
+          import com.facebook.react.uimanager.ViewManager;
+
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.List;
+
+          public class CustomPrinterPackage implements ReactPackage {
+              @Override
+              public List<NativeModule> createNativeModules(ReactApplicationContext reactContext) {
+                  List<NativeModule> modules = new ArrayList<>();
+                  modules.add(new CustomPrinterModule(reactContext));
+                  return modules;
+              }
+
+              @Override
+              public List<ViewManager> createViewManagers(ReactApplicationContext reactContext) {
+                  return Collections.emptyList();
+              }
+          }
+          EOF
+
+          # MainApplication.java
+          cat > android/app/src/main/java/com/aplikasiprinter/MainApplication.java <<'EOF'
+          package com.aplikasiprinter;
+
+          import android.app.Application;
+          import com.facebook.react.PackageList;
+          import com.facebook.react.ReactApplication;
+          import com.facebook.react.ReactNativeHost;
+          import com.facebook.react.ReactPackage;
+          import com.facebook.soloader.SoLoader;
+          import java.util.List;
+
+          public class MainApplication extends Application implements ReactApplication {
+
+            private final ReactNativeHost mReactNativeHost =
+                new ReactNativeHost(this) {
+                  @Override
+                  public boolean getUseDeveloperSupport() {
+                    return BuildConfig.DEBUG;
+                  }
+
+                  @Override
+                  protected List<ReactPackage> getPackages() {
+                    List<ReactPackage> packages = new PackageList(this).getPackages();
+                    packages.add(new CustomPrinterPackage());
+                    return packages;
+                  }
+
+                  @Override
+                  protected String getJSMainModuleName() {
+                    return "index";
+                  }
+                };
+
+            @Override
+            public ReactNativeHost getReactNativeHost() {
+              return mReactNativeHost;
+            }
+
+            @Override
+            public void onCreate() {
+              super.onCreate();
+              SoLoader.init(this, false);
+            }
+          }
+          EOF
 
       # ==============================
-      # 7. Build File APK Debug
+      # 4. Build APK
       # ==============================
       - name: Build Android APK
         run: |
           cd AplikasiPrinter/android
           chmod +x gradlew
-          ./gradlew assembleDebug \
-            --no-daemon \
-            --stacktrace
-
+          ./gradlew assembleDebug --no-daemon
 
       # ==============================
-      # 8. Upload File APK Sebagai Artifact
+      # 5. Upload File APK
       # ==============================
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: AplikasiPrinter-debug
-          path: |
-            AplikasiPrinter/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          path: AplikasiPrinter/android/app/build/outputs/apk/debug/app-debug.apk
