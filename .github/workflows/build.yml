@@ -74,6 +74,17 @@ jobs:
                   return "CustomPrinter";
               }
 
+              // Wajib untuk EventEmitter React Native agar tidak warning/error
+              @ReactMethod
+              public void addListener(String eventName) {
+                  // Required for RN built-in Event Emitter Calls
+              }
+
+              @ReactMethod
+              public void removeListeners(Integer count) {
+                  // Required for RN built-in Event Emitter Calls
+              }
+
               private void sendEvent(String eventName, WritableMap params) {
                   if (getReactApplicationContext().hasActiveCatalystInstance()) {
                       getReactApplicationContext()
@@ -322,7 +333,6 @@ jobs:
 
       - name: Create CustomPrinterPackage Java File
         run: |
-          mkdir -p android/app/src/main/java/com/aplikasiprinter
           cat > android/app/src/main/java/com/aplikasiprinter/CustomPrinterPackage.java <<'EOF'
           package com.aplikasiprinter;
 
@@ -350,13 +360,13 @@ jobs:
           }
           EOF
 
-      - name: Register Package in MainApplication.java
+      - name: Auto-Inject Package to MainApplication
         run: |
-          MAIN_APP="android/app/src/main/java/com/aplikasiprinter/MainApplication.java"
-          if [ -f "$MAIN_APP" ]; then
-            if ! grep -q "CustomPrinterPackage" "$MAIN_APP"; then
-              sed -i '/packages.add(new MainReactPackage());/a \          packages.add(new CustomPrinterPackage());' "$MAIN_APP" || true
-              sed -i '/List<ReactPackage> packages = new PackageList(this).getPackages();/a \          packages.add(new CustomPrinterPackage());' "$MAIN_APP" || true
+          JAVA_FILE=$(find android/app/src/main/java -name "MainApplication.java" -o -name "MainApplication.kt")
+          if [ -f "$JAVA_FILE" ]; then
+            if ! grep -q "CustomPrinterPackage" "$JAVA_FILE"; then
+              sed -i '/PackageList(this).getPackages()/a \          packages.add(new CustomPrinterPackage());' "$JAVA_FILE" || true
+              sed -i '/packages.add(new MainReactPackage());/a \          packages.add(new CustomPrinterPackage());' "$JAVA_FILE" || true
             fi
           fi
 
