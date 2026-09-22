@@ -16,7 +16,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -28,8 +28,8 @@ jobs:
         run: |
           npx react-native@latest init AplikasiPrinter --skip-install
           cd AplikasiPrinter
-          npm install
-          npm install https://github.com/tiasho/react-native-bluetooth-escpos-printer.git --save
+          npm install --legacy-peer-deps
+          npm install https://github.com/tiasho/react-native-bluetooth-escpos-printer.git --save --legacy-peer-deps
           
           # Buat file App.tsx dengan kode printer
           cat << 'EOF' > App.tsx
