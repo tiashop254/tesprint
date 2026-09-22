@@ -16,7 +16,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -26,7 +26,8 @@ jobs:
 
       - name: Initialize React Native App
         run: |
-          npx react-native@latest init AplikasiPrinter --skip-install
+          npm config set engine-strict false
+          npx react-native@0.72.6 init AplikasiPrinter --version 0.72.6 --skip-install
           cd AplikasiPrinter
           npm install --legacy-peer-deps
           npm install https://github.com/tiasho/react-native-bluetooth-escpos-printer.git --save --legacy-peer-deps
