@@ -29,23 +29,18 @@ jobs:
         run: |
           echo "🚀 Inisialisasi React Native Project..."
 
-          # Install paket dengan react-native-blob-util untuk fix permission PDF
           npm install react-native-document-picker@^9.0.1 react-native-pdf@6.7.4 react-native-blob-util@0.19.11 @react-native-async-storage/async-storage@^1.21.0 --save --legacy-peer-deps
 
-          # Generate project React Native
           npx react-native@0.72.6 init AplikasiPrinter --version 0.72.6 --skip-install
           cd AplikasiPrinter
           npm install react-native-document-picker@^9.0.1 react-native-pdf@6.7.4 react-native-blob-util@0.19.11 @react-native-async-storage/async-storage@^1.21.0 --save --legacy-peer-deps
 
-          # Salin App.js utama ke project
           cp ../App.js ./App.js
 
-          # Update compileSdkVersion & targetSdkVersion ke 34, serta minSdkVersion ke 23
           sed -i 's/compileSdkVersion = 33/compileSdkVersion = 34/g' android/build.gradle
           sed -i 's/targetSdkVersion = 33/targetSdkVersion = 34/g' android/build.gradle
           sed -i 's/minSdkVersion = 21/minSdkVersion = 23/g' android/build.gradle
 
-          # Buat AndroidManifest.xml lengkap dengan izin Bluetooth & Lokasi
           cat > android/app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
             package="com.aplikasiprinter">
@@ -83,7 +78,6 @@ jobs:
 
           mkdir -p android/app/src/main/java/com/aplikasiprinter
 
-          # CustomPrinterModule.java
           cat > android/app/src/main/java/com/aplikasiprinter/CustomPrinterModule.java <<'EOF'
           package com.aplikasiprinter;
 
@@ -128,7 +122,7 @@ jobs:
                   try {
                       BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
                       if (adapter == null) {
-                          promise.reject("NO_BT", "Bluetooth tidak didukung di perangkat ini.");
+                          promise.reject("NO_BT", "Bluetooth tidak didukung di HP ini.");
                           return;
                       }
 
@@ -138,7 +132,7 @@ jobs:
                       if (pairedDevices != null) {
                           for (BluetoothDevice device : pairedDevices) {
                               WritableMap map = Arguments.createMap();
-                              map.putString("name", device.getName() != null ? device.getName() : "Unknown");
+                              map.putString("name", device.getName() != null ? device.getName() : "Unknown Printer");
                               map.putString("address", device.getAddress());
                               deviceList.pushMap(map);
                           }
@@ -170,7 +164,7 @@ jobs:
                       PdfRenderer.Page page = renderer.openPage(0);
 
                       int printPixelWidth = paperWidthMm * 8;
-                      if (printPixelWidth <= 0) printPixelWidth = 384;
+                      if (printPixelWidth <= 0) printPixelWidth = 576; 
 
                       int height = (int) ((float) printPixelWidth / page.getWidth() * page.getHeight());
 
@@ -188,39 +182,94 @@ jobs:
                       }
 
                       BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-                      if (adapter == null) {
-                          promise.reject("NO_BT", "Perangkat tidak mendukung Bluetooth.");
-                          return;
-                      }
-
-                      if (!adapter.isEnabled()) {
+                      if (adapter == null || !adapter.isEnabled()) {
                           promise.reject("BT_OFF", "Bluetooth HP belum aktif.");
                           return;
                       }
 
                       BluetoothDevice device = adapter.getRemoteDevice(macAddress);
+                      String deviceName = device.getName() != null ? device.getName().toUpperCase() : "";
+
                       socket = device.createRfcommSocketToServiceRecord(SPP_UUID);
                       socket.connect();
 
                       OutputStream os = socket.getOutputStream();
-                      
-                      for (int c = 0; c < copies; c++) {
-                          os.write(new byte[]{0x1B, 0x40});
-                          byte[] printImageBytes = decodeBitmapToESCCommand(finalBitmap);
-                          os.write(printImageBytes);
-                          os.write(new byte[]{0x1D, 0x56, 0x41, 0x10});
+
+                      // DETEKSI AUTOMATIS NAMA PRINTER (TSPL / ESC-POS)
+                      boolean isLabelPrinter = deviceName.contains("XP") || 
+                                               deviceName.contains("420") || 
+                                               deviceName.contains("LABEL") || 
+                                               deviceName.contains("BARCODE") || 
+                                               deviceName.contains("XPRINTER") || 
+                                               deviceName.contains("TSC") ||
+                                               deviceName.contains("POSTEK");
+
+                      if (isLabelPrinter) {
+                          // MODE TSPL (Xprinter XP-420B DLL)
+                          int imgWidth = finalBitmap.getWidth();
+                          int imgHeight = finalBitmap.getHeight();
+                          int widthBytes = (imgWidth + 7) / 8;
+                          int paperHeightMm = (int) ((float) imgHeight / 8);
+
+                          for (int c = 0; c < copies; c++) {
+                              String setupCmd = "SIZE " + paperWidthMm + " mm," + paperHeightMm + " mm\r\n"
+                                      + "GAP 2 mm,0 mm\r\n"
+                                      + "CLS\r\n"
+                                      + "BITMAP 0,0," + widthBytes + "," + imgHeight + ",0,";
+                              
+                              os.write(setupCmd.getBytes("GBK"));
+                              os.write(convertBitmapToTSPLData(finalBitmap));
+                              os.write("\r\nPRINT 1,1\r\n".getBytes("GBK"));
+                          }
+                      } else {
+                          // MODE ESC/POS (RPP02N / Printer Struk Kasir biasa)
+                          for (int c = 0; c < copies; c++) {
+                              os.write(new byte[]{0x1B, 0x40});
+                              os.write(decodeBitmapToESCCommand(finalBitmap));
+                              os.write(new byte[]{0x1D, 0x56, 0x41, 0x10});
+                          }
                       }
 
                       os.flush();
                       socket.close();
 
-                      promise.resolve("Resi PDF Berhasil Dicetak (" + copies + "x)!");
+                      promise.resolve("Cetak Sukses (" + (isLabelPrinter ? "Mode Label TSPL" : "Mode Struk ESC/POS") + ")!");
                   } catch (Exception e) {
                       if (socket != null) {
                           try { socket.close(); } catch (Exception ignored) {}
                       }
                       promise.reject("PRINT_ERROR", e.getMessage());
                   }
+              }
+
+              private byte[] convertBitmapToTSPLData(Bitmap bitmap) {
+                  int width = bitmap.getWidth();
+                  int height = bitmap.getHeight();
+                  int widthBytes = (width + 7) / 8;
+                  byte[] data = new byte[widthBytes * height];
+
+                  int index = 0;
+                  for (int y = 0; y < height; y++) {
+                      for (int x = 0; x < widthBytes; x++) {
+                          byte b = 0;
+                          for (int bit = 0; bit < 8; bit++) {
+                              int posX = x * 8 + bit;
+                              if (posX < width) {
+                                  int pixel = bitmap.getPixel(posX, y);
+                                  int r = Color.red(pixel);
+                                  int g = Color.green(pixel);
+                                  int bVal = Color.blue(pixel);
+                                  if ((r + g + bVal) / 3 >= 128) {
+                                      b |= (1 << (7 - bit));
+                                  }
+                              } else {
+                                  b |= (1 << (7 - bit));
+                              }
+                          }
+                          data[index++] = b;
+                      }
+                  }
+                  return data;
               }
 
               private byte[] decodeBitmapToESCCommand(Bitmap bmp) {
@@ -262,7 +311,6 @@ jobs:
           }
           EOF
 
-          # CustomPrinterPackage.java
           cat > android/app/src/main/java/com/aplikasiprinter/CustomPrinterPackage.java <<'EOF'
           package com.aplikasiprinter;
 
@@ -290,7 +338,6 @@ jobs:
           }
           EOF
 
-          # MainApplication.java
           cat > android/app/src/main/java/com/aplikasiprinter/MainApplication.java <<'EOF'
           package com.aplikasiprinter;
 
