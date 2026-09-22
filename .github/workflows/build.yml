@@ -16,7 +16,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 18
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -26,7 +26,9 @@ jobs:
 
       - name: Initialize React Native App
         run: |
-          npm config set engine-strict false
+          # Paksa git untuk selalu menggunakan HTTPS daripada SSH
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          
           npx react-native@0.72.6 init AplikasiPrinter --version 0.72.6 --skip-install
           cd AplikasiPrinter
           npm install --legacy-peer-deps
