@@ -11,16 +11,16 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
@@ -74,15 +74,12 @@ jobs:
                   return "CustomPrinter";
               }
 
-              // Wajib untuk EventEmitter React Native agar tidak warning/error
               @ReactMethod
               public void addListener(String eventName) {
-                  // Required for RN built-in Event Emitter Calls
               }
 
               @ReactMethod
               public void removeListeners(Integer count) {
-                  // Required for RN built-in Event Emitter Calls
               }
 
               private void sendEvent(String eventName, WritableMap params) {
@@ -173,7 +170,7 @@ jobs:
                                                deviceName.contains("POSTEK");
 
                       int targetWidthMm = (paperWidthMm > 0) ? paperWidthMm : 78;
-                      int printPixelWidth = targetWidthMm * 8; // 203 DPI
+                      int printPixelWidth = targetWidthMm * 8;
 
                       int lastPrintedPage = startingIndex;
 
@@ -379,7 +376,7 @@ jobs:
           ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: app-release
           path: android/app/build/outputs/apk/release/app-release.apk
