@@ -22,37 +22,274 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '18'
 
       - name: Create package.json if missing
         run: |
           if [ ! -f "package.json" ]; then
-            node -e '
-              const fs = require("fs");
-              const pkg = {
-                name: "aplikasiprinter",
-                version: "1.0.0",
-                private: true,
-                scripts: { start: "react-native start" },
-                dependencies: {
-                  react: "18.2.0",
-                  "react-native": "0.72.6"
-                }
-              };
-              fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
-            '
+            cat > package.json <<'EOF'
+            {
+              "name": "aplikasiprinter",
+              "version": "1.0.0",
+              "private": true,
+              "scripts": {
+                "start": "react-native start"
+              },
+              "dependencies": {
+                "react": "18.2.0",
+                "react-native": "0.72.6"
+              }
+            }
+            EOF
+          fi
+
+      - name: Create index.js if missing
+        run: |
+          if [ ! -f "index.js" ]; then
+            cat > index.js <<'EOF'
+            import { AppRegistry } from 'react-native';
+            import App from './App';
+
+            AppRegistry.registerComponent('aplikasiprinter', () => App);
+            EOF
           fi
 
       - name: Install Dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Generate Android Folder
+      - name: Generate Android Project Structure
         run: |
           if [ ! -d "android" ]; then
-            yarn config set ignore-engines true
-            npx --yes react-native@0.72.6 init TempApp --skip-install
-            cp -r TempApp/android ./android
-            rm -rf TempApp
+            mkdir -p android/app/src/main/java/com/aplikasiprinter
+            mkdir -p android/app/src/main/res/values
+            mkdir -p android/app/src/main/res/mipmap-hdpi
+            mkdir -p android/gradle/wrapper
+
+            # settings.gradle
+            cat > android/settings.gradle <<'EOF'
+            rootProject.name = 'aplikasiprinter'
+            apply from: file("../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesSettingsGradle(settings)
+            include ':app'
+            EOF
+
+            # build.gradle root
+            cat > android/build.gradle <<'EOF'
+            buildscript {
+                ext {
+                    buildToolsVersion = "33.0.0"
+                    minSdkVersion = 21
+                    compileSdkVersion = 33
+                    targetSdkVersion = 33
+                    ndkVersion = "23.1.7779620"
+                }
+                repositories {
+                    google()
+                    mavenCentral()
+                }
+                dependencies {
+                    classpath("com.android.tools.build:gradle:7.4.2")
+                    classpath("com.facebook.react:react-native-gradle-plugin")
+                }
+            }
+            allprojects {
+                repositories {
+                    google()
+                    mavenCentral()
+                    maven { url 'https://www.jitpack.io' }
+                }
+            }
+            EOF
+
+            # gradle-wrapper.properties
+            cat > android/gradle/wrapper/gradle-wrapper.properties <<'EOF'
+            distributionBase=GRADLE_USER_HOME
+            distributionPath=wrapper/dists
+            distributionUrl=https\://services.gradle.org/distributions/gradle-8.0.1-bin.zip
+            networkTimeout=10000
+            validateDistributionUrl=true
+            zipStoreBase=GRADLE_USER_HOME
+            zipStorePath=wrapper/dists
+            EOF
+
+            # app/build.gradle
+            cat > android/app/build.gradle <<'EOF'
+            apply plugin: "com.android.application"
+            apply plugin: "com.facebook.react"
+
+            android {
+                ndkVersion rootProject.ext.ndkVersion
+                compileSdkVersion rootProject.ext.compileSdkVersion
+                namespace "com.aplikasiprinter"
+
+                defaultConfig {
+                    applicationId "com.aplikasiprinter"
+                    minSdkVersion rootProject.ext.minSdkVersion
+                    targetSdkVersion rootProject.ext.targetSdkVersion
+                    versionCode 1
+                    versionName "1.0"
+                }
+                signingConfigs {
+                    debug {
+                        storeFile file('debug.keystore')
+                        storePassword 'android'
+                        keyAlias 'androiddebugkey'
+                        keyPassword 'android'
+                    }
+                }
+                buildTypes {
+                    debug {
+                        signingConfig signingConfigs.debug
+                    }
+                    release {
+                        signingConfig signingConfigs.debug
+                        minifyEnabled false
+                        proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+                    }
+                }
+            }
+
+            dependencies {
+                implementation("com.facebook.react:react-android")
+                implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.0.0")
+            }
+
+            apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
+            EOF
+
+            # AndroidManifest.xml
+            cat > android/app/src/main/AndroidManifest.xml <<'EOF'
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+                <uses-permission android:name="android.permission.INTERNET" />
+                <uses-permission android:name="android.permission.BLUETOOTH" />
+                <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+                <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+                <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+                <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+                <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+                <application
+                  android:name=".MainApplication"
+                  android:label="Aplikasi Printer"
+                  android:allowBackup="false"
+                  android:theme="@style/AppTheme">
+                  <activity
+                    android:name=".MainActivity"
+                    android:label="Aplikasi Printer"
+                    android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+                    android:launchMode="singleTask"
+                    android:windowSoftInputMode="adjustResize"
+                    android:exported="true">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:name="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+                  </activity>
+                </application>
+            </manifest>
+            EOF
+
+            # styles.xml
+            cat > android/app/src/main/res/values/styles.xml <<'EOF'
+            <resources>
+                <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+                </style>
+            </resources>
+            EOF
+
+            # MainActivity.java
+            cat > android/app/src/main/java/com/aplikasiprinter/MainActivity.java <<'EOF'
+            package com.aplikasiprinter;
+
+            import com.facebook.react.ReactActivity;
+            import com.facebook.react.ReactActivityDelegate;
+            import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
+            import com.facebook.react.defaults.DefaultReactActivityDelegate;
+
+            public class MainActivity extends ReactActivity {
+              @Override
+              protected String getMainComponentName() {
+                return "aplikasiprinter";
+              }
+
+              @Override
+              protected ReactActivityDelegate createReactActivityDelegate() {
+                return new DefaultReactActivityDelegate(
+                    this,
+                    getMainComponentName(),
+                    DefaultNewArchitectureEntryPoint.getFabricEnabled());
+              }
+            }
+            EOF
+
+            # MainApplication.java
+            cat > android/app/src/main/java/com/aplikasiprinter/MainApplication.java <<'EOF'
+            package com.aplikasiprinter;
+
+            import android.app.Application;
+            import com.facebook.react.PackageList;
+            import com.facebook.react.ReactApplication;
+            import com.facebook.react.ReactNativeHost;
+            import com.facebook.react.ReactPackage;
+            import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
+            import com.facebook.react.defaults.DefaultReactNativeHost;
+            import com.facebook.soloader.SoLoader;
+            import java.util.List;
+
+            public class MainApplication extends Application implements ReactApplication {
+
+              private final ReactNativeHost mReactNativeHost =
+                  new DefaultReactNativeHost(this) {
+                    @Override
+                    public boolean getUseDeveloperSupport() {
+                      return BuildConfig.DEBUG;
+                    }
+
+                    @Override
+                    protected List<ReactPackage> getPackages() {
+                      @SuppressWarnings("UnnecessaryLocalVariable")
+                      List<ReactPackage> packages = new PackageList(this).getPackages();
+                      packages.add(new CustomPrinterPackage());
+                      return packages;
+                    }
+
+                    @Override
+                    protected String getJSMainModuleName() {
+                      return "index";
+                    }
+
+                    @Override
+                    protected boolean isNewArchEnabled() {
+                      return BuildConfig.IS_NEW_ARCHITECTURE_ENABLED;
+                    }
+
+                    @Override
+                    protected Boolean isHermesEnabled() {
+                      return BuildConfig.IS_HERMES_ENABLED;
+                    }
+                  };
+
+              @Override
+              public ReactNativeHost getReactNativeHost() {
+                return mReactNativeHost;
+              }
+
+              @Override
+              public void onCreate() {
+                super.onCreate();
+                SoLoader.init(this, /* native exopackage */ false);
+                if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
+                  DefaultNewArchitectureEntryPoint.load();
+                }
+              }
+            }
+            EOF
+
+            # Keytool Debug Keystore
+            keytool -genkey -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            
+            # Install Gradle Wrapper Jar
+            cd android
+            npm exec gradle wrapper
           fi
 
       - name: Create CustomPrinterModule Java File
@@ -384,16 +621,6 @@ jobs:
               }
           }
           EOF
-
-      - name: Auto-Inject Package to MainApplication
-        run: |
-          JAVA_FILE=$(find android/app/src/main/java -name "MainApplication.java" -o -name "MainApplication.kt")
-          if [ -f "$JAVA_FILE" ]; then
-            if ! grep -q "CustomPrinterPackage" "$JAVA_FILE"; then
-              sed -i '/PackageList(this).getPackages()/a \          packages.add(new CustomPrinterPackage());' "$JAVA_FILE" || true
-              sed -i '/packages.add(new MainReactPackage());/a \          packages.add(new CustomPrinterPackage());' "$JAVA_FILE" || true
-            fi
-          fi
 
       - name: Make Gradle Executable
         run: chmod +x android/gradlew
