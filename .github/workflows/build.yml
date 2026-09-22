@@ -27,15 +27,24 @@ jobs:
 
       - name: Auto Generate Project Files
         run: |
-          echo "🚀 Inisialisasi React Native..."
+          echo "🚀 Inisialisasi React Native Project..."
 
+          # Pre-install paket di root agar tidak error pembacaan modul saat bundling
+          npm install react-native-document-picker react-native-pdf react-native-blob-util --save --legacy-peer-deps
+
+          # Generate project React Native
           npx react-native@0.72.6 init AplikasiPrinter --version 0.72.6 --skip-install
           cd AplikasiPrinter
           npm install react-native-document-picker react-native-pdf react-native-blob-util --save --legacy-peer-deps
 
+          # Salin App.js utama ke project
           cp ../App.js ./App.js
 
-          # Manifest dengan izin lengkap
+          # Update compileSdkVersion dan targetSdkVersion ke 34 agar tidak error androidx.core
+          sed -i 's/compileSdkVersion = 33/compileSdkVersion = 34/g' android/build.gradle
+          sed -i 's/targetSdkVersion = 33/targetSdkVersion = 34/g' android/build.gradle
+
+          # Buat AndroidManifest.xml lengkap dengan izin Bluetooth & Lokasi
           cat > android/app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
             package="com.aplikasiprinter">
@@ -73,7 +82,7 @@ jobs:
 
           mkdir -p android/app/src/main/java/com/aplikasiprinter
 
-          # CustomPrinterModule.java dengan opsi Rotasi, Width mm, & Jumlah Copies
+          # CustomPrinterModule.java
           cat > android/app/src/main/java/com/aplikasiprinter/CustomPrinterModule.java <<'EOF'
           package com.aplikasiprinter;
 
@@ -81,7 +90,6 @@ jobs:
           import android.bluetooth.BluetoothDevice;
           import android.bluetooth.BluetoothSocket;
           import android.graphics.Bitmap;
-          import android.graphics.Canvas;
           import android.graphics.Color;
           import android.graphics.Matrix;
           import android.graphics.pdf.PdfRenderer;
@@ -130,9 +138,8 @@ jobs:
                       PdfRenderer renderer = new PdfRenderer(pfd);
                       PdfRenderer.Page page = renderer.openPage(0);
 
-                      // Konversi Lebar mm ke Pixel Dot Thermal (8 dots/mm)
                       int printPixelWidth = paperWidthMm * 8;
-                      if (printPixelWidth <= 0) printPixelWidth = 384; // default 58mm
+                      if (printPixelWidth <= 0) printPixelWidth = 384;
 
                       int height = (int) ((float) printPixelWidth / page.getWidth() * page.getHeight());
 
@@ -142,7 +149,6 @@ jobs:
                       renderer.close();
                       pfd.close();
 
-                      // Terapkan Rotasi (0, 90, 180, 270)
                       Bitmap finalBitmap = originalBitmap;
                       if (rotationDegree != 0) {
                           Matrix matrix = new Matrix();
@@ -167,12 +173,11 @@ jobs:
 
                       OutputStream os = socket.getOutputStream();
                       
-                      // Cetak sesuai jumlah eksemplar (copies)
                       for (int c = 0; c < copies; c++) {
-                          os.write(new byte[]{0x1B, 0x40}); // Initialize printer
+                          os.write(new byte[]{0x1B, 0x40});
                           byte[] printImageBytes = decodeBitmapToESCCommand(finalBitmap);
                           os.write(printImageBytes);
-                          os.write(new byte[]{0x1D, 0x56, 0x41, 0x10}); // Cut paper / feed
+                          os.write(new byte[]{0x1D, 0x56, 0x41, 0x10});
                       }
 
                       os.flush();
@@ -254,7 +259,7 @@ jobs:
           }
           EOF
 
-          # MainApplication.java
+          # MainApplication.java (Menggunakan sintaks import Java yang benar)
           cat > android/app/src/main/java/com/aplikasiprinter/MainApplication.java <<'EOF'
           package com.aplikasiprinter;
 
@@ -262,7 +267,7 @@ jobs:
           import com.facebook.react.PackageList;
           import com.facebook.react.ReactApplication;
           import com.facebook.react.ReactNativeHost;
-          import.facebook.react.ReactPackage;
+          import com.facebook.react.ReactPackage;
           import com.facebook.soloader.SoLoader;
           import java.util.List;
 
