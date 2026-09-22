@@ -29,13 +29,13 @@ jobs:
         run: |
           echo "🚀 Inisialisasi React Native Project..."
 
-          # Pre-install paket di root agar tidak error pembacaan modul saat bundling
-          npm install react-native-document-picker react-native-pdf react-native-blob-util --save --legacy-peer-deps
+          # Install paket dengan versi terkunci yang kompatibel dengan React Native 0.72.6
+          npm install react-native-document-picker@^9.0.1 react-native-pdf@6.7.4 react-native-blob-util@0.19.11 --save --legacy-peer-deps
 
           # Generate project React Native
           npx react-native@0.72.6 init AplikasiPrinter --version 0.72.6 --skip-install
           cd AplikasiPrinter
-          npm install react-native-document-picker react-native-pdf react-native-blob-util --save --legacy-peer-deps
+          npm install react-native-document-picker@^9.0.1 react-native-pdf@6.7.4 react-native-blob-util@0.19.11 --save --legacy-peer-deps
 
           # Salin App.js utama ke project
           cp ../App.js ./App.js
