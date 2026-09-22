@@ -80,9 +80,9 @@ jobs:
             # Keytool Debug Keystore
             keytool -genkey -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
             
-            # Setup Wrapper
+            # Setup Wrapper dengan Sistem Gradle
             cd android
-            npm exec gradle wrapper
+            gradle wrapper
           fi
 
       - name: Create CustomPrinterModule Java File
