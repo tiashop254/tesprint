@@ -40,9 +40,10 @@ jobs:
           # Salin App.js utama ke project
           cp ../App.js ./App.js
 
-          # Update compileSdkVersion dan targetSdkVersion ke 34 agar tidak error androidx.core
+          # Update compileSdkVersion & targetSdkVersion ke 34, serta minSdkVersion ke 23
           sed -i 's/compileSdkVersion = 33/compileSdkVersion = 34/g' android/build.gradle
           sed -i 's/targetSdkVersion = 33/targetSdkVersion = 34/g' android/build.gradle
+          sed -i 's/minSdkVersion = 21/minSdkVersion = 23/g' android/build.gradle
 
           # Buat AndroidManifest.xml lengkap dengan izin Bluetooth & Lokasi
           cat > android/app/src/main/AndroidManifest.xml <<'EOF'
@@ -259,7 +260,7 @@ jobs:
           }
           EOF
 
-          # MainApplication.java (Menggunakan sintaks import Java yang benar)
+          # MainApplication.java
           cat > android/app/src/main/java/com/aplikasiprinter/MainApplication.java <<'EOF'
           package com.aplikasiprinter;
 
